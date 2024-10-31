@@ -47,3 +47,4 @@ CUDA_VISIBLE_DEVICES=1 python train_enc_dec.py --model_name=EncDec --clip_durati
 # BSRoformer14a	mel, L=12, clip=4, bs=4, full Transformer, ema=8.2 dB
 # + BSRoformer15a	10b, mel, L=12, patch=(1, 4), clip=3, bs=2, ema=10.9 dB
 # + BSRoformer16a	10b, mel, L=12, patch=(1, 1), clip=3, bs=1, ema=
+# BSRoformer17a	Transformer-UNet, clip=4, bs=2, ema=
