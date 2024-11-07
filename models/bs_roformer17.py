@@ -330,7 +330,7 @@ class BSRoformer17a(Fourier):
         self.encoder2 = BSTransformerLayers(dim=192, n_heads=n_heads, depth=2)
         self.encoder3 = BSTransformerLayers(dim=384, n_heads=n_heads, depth=2)
         self.encoder4 = BSTransformerLayers(dim=768, n_heads=n_heads, depth=2)
-        self.latent_layers = TransformerLayers(dim=1536, n_heads=n_heads, depth=4)
+        # self.latent_layers = TransformerLayers(dim=1536, n_heads=n_heads, depth=4)
 
         
         self.fc_in = nn.Linear(out_channels * np.prod(self.patch_size), 96)
@@ -345,7 +345,8 @@ class BSRoformer17a(Fourier):
         self.decoder3 = BSTransformerLayers(dim=192, n_heads=n_heads, depth=2)
         self.decoder4 = BSTransformerLayers(dim=96, n_heads=n_heads, depth=2)
 
-        self.decoder1_proj = nn.Linear(1536 // gamma, 768)
+        # self.decoder1_proj = nn.Linear(1536 // gamma, 768)
+        self.decoder1_proj = nn.Linear(768, 768)
         self.decoder2_proj = nn.Linear(768 // gamma, 384)
         self.decoder3_proj = nn.Linear(384 // gamma, 192)
         self.decoder4_proj = nn.Linear(192 // gamma, 96)
@@ -417,11 +418,12 @@ class BSRoformer17a(Fourier):
         x4_pool = rearrange(x4, 'b d (t1 t2) (f1 f2) -> b (t2 f2 d) t1 f1', t2=2, f2=2)
 
         # Latent
-        x = rearrange(x4_pool, 'b d t f -> b t f d')
-        x = self.latent_proj(x)
-        x = rearrange(x, 'b t f d -> b d t f')
-        x = self.latent_layers(x)
-
+        # x = rearrange(x4_pool, 'b d t f -> b t f d')
+        # x = self.latent_proj(x)
+        # x = rearrange(x, 'b t f d -> b d t f')
+        # x = self.latent_layers(x)
+        x = x4_pool
+        
         # Decoders
         x = rearrange(x, 'b (t2 f2 d) t1 f1 -> b d (t1 t2) (f1 f2)', t2=2, f2=2)
         x = rearrange(x, 'b d t f -> b t f d')
