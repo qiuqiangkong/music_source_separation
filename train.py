@@ -94,7 +94,7 @@ def train(args):
             "filename": filename,
         }
         wandb.init(
-            project="mini_source_separation", 
+            project="mini_source_separation2", 
             config=config, 
             name="{} {}".format(model_name, str(train_dataset.remix_weights)), 
             magic=True
@@ -382,9 +382,21 @@ def get_model(model_name):
         from models.bs_roformer17 import BSRoformer17a
         return BSRoformer17a(
             input_channels=2,
-            # depth=12,
-            # dim=384,
-            # n_heads=12
+        )
+    elif model_name == "BSRoformer17b":
+        from models.bs_roformer17 import BSRoformer17b
+        return BSRoformer17b(
+            input_channels=2,
+        )
+    elif model_name == "BSRoformer18a":
+        from models.bs_roformer18 import BSRoformer18a
+        return BSRoformer18a(
+            input_channels=2,
+        )
+    elif model_name == "BSRoformer19a":
+        from models.bs_roformer19 import BSRoformer19a
+        return BSRoformer19a(
+            input_channels=2,
         )
     elif model_name == "WavUNet":
         from models.wavunet import WavUNet

@@ -297,6 +297,7 @@ class BSRoformer17a(Fourier):
         return x
 '''
 
+
 class BSRoformer17a(Fourier):
     def __init__(
         self,
@@ -337,7 +338,7 @@ class BSRoformer17a(Fourier):
         self.encoder2_proj = nn.Linear(96 * gamma, 192)
         self.encoder3_proj = nn.Linear(192 * gamma, 384)
         self.encoder4_proj = nn.Linear(384 * gamma, 768)
-        self.latent_proj = nn.Linear(768 * gamma, 1536)
+        # self.latent_proj = nn.Linear(768 * gamma, 1536)
 
         #
         self.decoder1 = BSTransformerLayers(dim=768, n_heads=n_heads, depth=2)
@@ -452,6 +453,124 @@ class BSRoformer17a(Fourier):
         x = rearrange(x, 'b t f d -> b d t f')
         x = self.decoder4(x + x1)
 
+        x = self.unpatchify(x, time_steps)
+
+        x = self.stft_to_image.inverse_transform(x)
+
+        x = rearrange(x, 'b (c z) t f -> b c t f z', c=self.input_channels)
+        # shape: (b, c, t, f, z)
+
+        mask = torch.view_as_complex(x.contiguous())
+        # shape: (b, c, t, f)
+
+        sep_stft = mask * complex_sp
+
+        output = self.istft(sep_stft)
+        # (b, c, samples_num)
+        
+
+        # return output
+
+        return output
+
+    def patchify(self, x):
+
+        B, C, T, Freq = x.shape
+        pad_len = int(np.ceil(T / self.ds_t)) * self.ds_t - T
+        x = F.pad(x, pad=(0, 0, 0, pad_len))
+
+        t2, f2 = self.patch_size
+        x = rearrange(x, 'b d (t1 t2) (f1 f2) -> b t1 f1 (t2 f2 d)', t2=t2, f2=f2)
+        x = self.fc_in(x)  # (b, t, f, d)
+        x = rearrange(x, 'b t f d -> b d t f')
+
+        return x
+
+    def unpatchify(self, x, time_steps):
+        t2, f2 = self.patch_size
+        x = rearrange(x, 'b d t f -> b t f d')
+        x = self.fc_out(x)  # (b, t, f, d)
+        x = rearrange(x, 'b t1 f1 (t2 f2 d) -> b d (t1 t2) (f1 f2)', t2=t2, f2=f2)
+
+        x = x[:, :, 0 : time_steps, :]
+
+        return x
+
+
+class BSRoformer17b(Fourier):
+    def __init__(
+        self,
+        n_fft: int = 2048,
+        hop_length: int = 441,
+        input_channels: int = 2,
+    ):
+        super().__init__(n_fft, hop_length)
+
+        self.input_channels = input_channels
+        self.cmplx_num = 2
+        n_heads = 12
+        
+        self.patch_size = (1, 1)
+        sr = 44100
+        mel_bins = 256
+        out_channels = 64
+        self.ds_t = 16
+        self.ds_f = 16
+
+        self.stft_to_image = StftToImage(
+            in_channels=self.input_channels * self.cmplx_num, 
+            sr=sr, 
+            n_fft=n_fft, 
+            mel_bins=mel_bins,
+            out_channels=out_channels
+        )
+
+        self.encoder1 = BSTransformerLayers(dim=384, n_heads=n_heads, depth=10)
+        self.fc_in = nn.Linear(out_channels * np.prod(self.patch_size), 384)
+
+        self.fc_out = nn.Linear(
+            in_features=384, 
+            out_features=out_channels * np.prod(self.patch_size),
+        )
+        
+    def forward(self, mixture):
+        """Separation model.
+
+        Args:
+            mixture: (batch_size, channels_num, samples_num)
+
+        Outputs:
+            output: (batch_size, channels_num, samples_num)
+
+        Constants:
+            b: batch_size
+            c: channels_num=2
+            z: complex_num=2
+        """
+        
+        t1 = time.time()
+
+        # Complex spectrum.
+        complex_sp = self.stft(mixture)
+        # shape: (b, c, t, f)
+
+        batch_size = complex_sp.shape[0]
+        time_steps = complex_sp.shape[2]
+
+        x = torch.view_as_real(complex_sp)
+        # shape: (b, c, t, f, z)
+
+        x = rearrange(x, 'b c t f z -> b (c z) t f')
+
+        x = self.stft_to_image.transform(x)
+        # shape: (b, d, t, f)
+
+        x = self.patchify(x)
+        # shape: (b, d, t, f)
+
+        #
+        x = self.encoder1(x)
+        
         x = self.unpatchify(x, time_steps)
 
         x = self.stft_to_image.inverse_transform(x)
@@ -717,7 +836,31 @@ class BSTransformerLayers(nn.Module):
             x = rearrange(x, '(b t) f d -> b d t f', b=batch_size)
         
         return x
+    '''
+    def forward(self, x):
+        """
+        Args:
+            x: (batch_size, in_channels, time_steps, freq_bins)
 
+        Returns:
+            output: (batch_size, out_channels, time_steps // 2, freq_bins // 2)
+        """
+        batch_size = x.shape[0]
+        x = rearrange(x, 'b d t f -> (b f) t d')
+
+        for t_transformer, f_transformer in self.transformers:
+
+            x = t_transformer(x)
+
+            x = rearrange(x, '(b f) t d -> (b t) f d', b=batch_size)
+            x = f_transformer(x)
+
+            x = rearrange(x, '(b t) f d -> (b f) t d', b=batch_size)
+        
+        x = rearrange(x, '(b f) t d -> b d t f', b=batch_size)    
+
+        return x
+        '''
 
 class TransformerLayers(nn.Module):
     def __init__(self, dim, n_heads, depth):
