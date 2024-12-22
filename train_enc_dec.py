@@ -12,7 +12,6 @@ import torch.optim as optim
 from torch import nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from copy import deepcopy
 
 import wandb
 
@@ -21,7 +20,6 @@ wandb.require("core")
 from data.audio import load
 from data.musdb18hq import MUSDB18HQ
 from data.crops import RandomCrop
-from utils import update_ema, requires_grad
 
 
 def train(args):
@@ -38,11 +36,11 @@ def train(args):
     num_workers = 16
     pin_memory = True
     use_scheduler = True
-    test_step_frequency = 5000
+    test_step_frequency = 10000
     save_step_frequency = 10000
-    evaluate_num = 10
+    evaluate_num = 5
     training_steps = 1000000
-    wandb_log = True
+    wandb_log = False
     device = "cuda"
 
     filename = Path(__file__).stem
@@ -52,13 +50,18 @@ def train(args):
     
     root = "/datasets/musdb18hq"
 
+    if wandb_log:
+        config = vars(args) | {
+            "filename": filename,
+        }
+        wandb.init(project="mini_source_separation", config=config)
+
     # Training dataset
     train_dataset = MUSDB18HQ(
         root=root,
         split="train",
         sr=sr,
         crop=RandomCrop(clip_duration=clip_duration, end_pad=0.),
-        remix={"no_remix": 0., "half_remix": 1.0, "full_remix": 0.}
     )
 
     # Samplers
@@ -77,28 +80,11 @@ def train(args):
     model = get_model(model_name)
     model.to(device)
 
-    # EMA
-    ema = deepcopy(model).to(device)
-    requires_grad(ema, False)
-    update_ema(ema, model, decay=0)  # Ensure EMA is initialized with synced weights
-    ema.eval()  # EMA model should always be in eval mode
-
     # Optimizer
     optimizer = optim.AdamW(model.parameters(), lr=lr)
 
     if use_scheduler:
         scheduler = optim.lr_scheduler.LambdaLR(optimizer=optimizer, lr_lambda=warmup_lambda)
-
-    if wandb_log:
-        config = vars(args) | {
-            "filename": filename,
-        }
-        wandb.init(
-            project="mini_source_separation2", 
-            config=config, 
-            name="{} {}".format(model_name, str(train_dataset.remix_weights)), 
-            magic=True
-        )
 
     # Create checkpoints directory
     Path(checkpoints_dir).mkdir(parents=True, exist_ok=True)
@@ -107,7 +93,7 @@ def train(args):
     for step, data in enumerate(tqdm(train_dataloader)):
 
         mixture = data["mixture"].to(device)
-        target = data["vocals"].to(device)
+        target = data["mixture"].to(device)
 
         # Forward
         model.train()
@@ -120,7 +106,6 @@ def train(args):
         optimizer.zero_grad()   # Reset all parameter.grad to 0
         loss.backward()     # Update all parameter.grad
         optimizer.step()    # Update all parameters based on all parameter.grad
-        update_ema(ema, model)
 
         # Learning rate scheduler (optional)
         if use_scheduler:
@@ -131,7 +116,6 @@ def train(args):
 
             sdrs = {}
 
-            
             for split in ["train", "test"]:
             
                 sdr = validate(
@@ -146,33 +130,18 @@ def train(args):
                     evaluate_num=evaluate_num,
                 )
                 sdrs[split] = sdr
-            
-            sdr = validate(
-                root=root, 
-                split="test", 
-                sr=sr,
-                clip_duration=clip_duration,
-                source_types=source_types, 
-                target_source_type="vocals",
-                batch_size=batch_size,
-                model=ema,
-                evaluate_num=evaluate_num,
-            )
-            sdrs["test_ema"] = sdr
 
             print("--- step: {} ---".format(step))
             print("Evaluate on {} songs.".format(evaluate_num))
             print("Loss: {:.3f}".format(loss))
             print("Train SDR: {:.3f}".format(sdrs["train"]))
             print("Test SDR: {:.3f}".format(sdrs["test"]))
-            print("Test SDR ema: {:.3f}".format(sdrs["test_ema"]))
 
             if wandb_log:
                 wandb.log(
                     data={
                         "train_sdr": sdrs["train"],
                         "test_sdr": sdrs["test"],
-                        "test_sdr_ema": sdrs["test_ema"],
                         "loss": loss.item(),
                     },
                     step=step
@@ -188,13 +157,9 @@ def train(args):
             torch.save(model.state_dict(), Path(checkpoint_path))
             print("Save model to {}".format(checkpoint_path))
 
-            checkpoint_path = Path(checkpoints_dir, "latest_ema.pth")
-            torch.save(ema.state_dict(), Path(checkpoint_path))
-            print("Save model to {}".format(checkpoint_path))
-
         if step == training_steps:
             break
-
+        
 
 def get_model(model_name):
     if model_name == "UNet":
@@ -203,7 +168,7 @@ def get_model(model_name):
     elif model_name == "BSRoformer":
         from models.bs_roformer import BSRoformer
         return BSRoformer(
-            time_stacks=1,
+            time_stacks=4,
             depth=12,
             dim=384,
             n_heads=12,
@@ -215,202 +180,11 @@ def get_model(model_name):
             dim=384,
             n_heads=12,
         )
-    elif model_name == "BSRoformer3":
-        from models.bs_roformer3 import BSRoformer3
-        return BSRoformer3(
-            depth=12,
+    elif model_name == "EncDec":
+        from models.enc_dec import EncDec
+        return EncDec(
             dim=384,
-            n_heads=12,
         )
-    elif model_name == "BSRoformer4a":
-        from models.bs_roformer4 import BSRoformer4a
-        return BSRoformer4a(
-            depth=12,
-            dim=384,
-            n_heads=12,
-        )
-    elif model_name == "BSRoformer4b":
-        from models.bs_roformer4 import BSRoformer4b
-        return BSRoformer4b(
-            depth=12,
-            dim=384,
-            n_heads=12,
-        )
-    elif model_name == "BSRoformer5a":
-        from models.bs_roformer5 import BSRoformer5a
-        return BSRoformer5a(
-            depth=12,
-            dim=384,
-            n_heads=12,
-        )
-    elif model_name == "BSRoformer6a":
-        from models.bs_roformer6 import BSRoformer6a
-        return BSRoformer6a(
-            depth=12,
-            dim=384,
-            n_heads=12,
-        )
-    elif model_name == "BSRoformer7a":
-        from models.bs_roformer7 import BSRoformer7a
-        return BSRoformer7a(
-            n_fft=2048,
-            hop_length=441,
-            input_channels=2,
-            t1=101,
-            f1=64,
-            t2=4,
-            f2=1,
-            depth=12,
-            dim=384,
-            n_heads=12
-        )
-    elif model_name == "BSRoformer7b":
-        from models.bs_roformer7 import BSRoformer7a
-        return BSRoformer7a(
-            n_fft=2048,
-            hop_length=441,
-            input_channels=2,
-            t1=201,
-            f1=64,
-            t2=1,
-            f2=1,
-            depth=12,
-            dim=384,
-            n_heads=12
-        )
-    elif model_name == "BSRoformer8a":
-        from models.bs_roformer8 import BSRoformer8a
-        return BSRoformer8a(
-            n_fft=2048,
-            hop_length=441,
-            input_channels=2,
-            t1=101,
-            f1=64,
-            t2=4,
-            f2=1,
-            depth=24,
-            dim=384,
-            n_heads=12
-        )
-    elif model_name == "BSRoformer9a":
-        from models.bs_roformer9 import BSRoformer9a
-        return BSRoformer9a(
-            n_fft=2048,
-            hop_length=441,
-            input_channels=2,
-            t1=101,
-            f1=64,
-            t2=4,
-            f2=1,
-            depth=24,
-            dim=384,
-            n_heads=12
-        )
-    elif model_name == "BSRoformer10a":
-        from models.bs_roformer10 import BSRoformer10a
-        return BSRoformer10a(
-            n_fft=2048,
-            hop_length=441,
-            input_channels=2,
-            depth=24,
-            dim=384,
-            n_heads=12
-        )
-    elif model_name == "BSRoformer10b":
-        from models.bs_roformer10 import BSRoformer10a
-        return BSRoformer10a(
-            n_fft=2048,
-            hop_length=441,
-            input_channels=2,
-            depth=12,
-            dim=384,
-            n_heads=12
-        )
-    elif model_name == "BSRoformer11a":
-        from models.bs_roformer11 import BSRoformer11a
-        return BSRoformer11a(
-            n_fft=2048,
-            hop_length=441,
-            input_channels=2,
-            depth=12,
-            dim=384,
-            n_heads=12
-        )
-    elif model_name == "BSRoformer12a":
-        from models.bs_roformer12 import BSRoformer12a
-        return BSRoformer12a(
-            n_fft=2048,
-            hop_length=441,
-            input_channels=2,
-            depth=12,
-            dim=384,
-            n_heads=12
-        )
-    elif model_name == "BSRoformer13a":
-        from models.bs_roformer13 import BSRoformer13a
-        return BSRoformer13a(
-            input_channels=2,
-            depth=12,
-            dim=384,
-            n_heads=12
-        )
-    elif model_name == "BSRoformer14a":
-        from models.bs_roformer14 import BSRoformer14a
-        return BSRoformer14a(
-            input_channels=2,
-            depth=24,
-            dim=384,
-            n_heads=12
-        )
-    elif model_name == "BSRoformer15a":
-        from models.bs_roformer15 import BSRoformer15a
-        return BSRoformer15a(
-            input_channels=2,
-            depth=12,
-            dim=384,
-            n_heads=12
-        )
-    elif model_name == "BSRoformer16a":
-        from models.bs_roformer16 import BSRoformer16a
-        return BSRoformer16a(
-            input_channels=2,
-            depth=12,
-            dim=384,
-            n_heads=12
-        )
-    elif model_name == "BSRoformer17a":
-        from models.bs_roformer17 import BSRoformer17a
-        return BSRoformer17a(
-            input_channels=2,
-        )
-    elif model_name == "BSRoformer17b":
-        from models.bs_roformer17 import BSRoformer17b
-        return BSRoformer17b(
-            input_channels=2,
-        )
-    elif model_name == "BSRoformer18a":
-        from models.bs_roformer18 import BSRoformer18a
-        return BSRoformer18a(
-            input_channels=2,
-        )
-    elif model_name == "BSRoformer19a":
-        from models.bs_roformer19 import BSRoformer19a
-        return BSRoformer19a(
-            input_channels=2,
-        )
-    elif model_name == "BSRoformer20a":
-        from models.bs_roformer20 import BSRoformer20a
-        return BSRoformer20a(
-            input_channels=2,
-        )
-    elif model_name == "BSRoformer21a":
-        from models.bs_roformer21 import BSRoformer21a
-        return BSRoformer21a(
-            input_channels=2,
-        )
-    elif model_name == "WavUNet":
-        from models.wavunet import WavUNet
-        return WavUNet()
     else:
         raise NotImplementedError
 
@@ -495,12 +269,12 @@ def validate(
 
         sep_wav = separate(
             model=model, 
-            audio=data["mixture"], 
+            audio=data["vocals"], 
             clip_samples=clip_samples,
             batch_size=batch_size
         )
 
-        target_wav = data[target_source_type]
+        target_wav = data["vocals"]
 
         # Calculate SDR. Shape should be (sources_num, channels_num, audio_samples)
         (sdrs, _, _, _) = museval.evaluate([target_wav.T], [sep_wav.T])

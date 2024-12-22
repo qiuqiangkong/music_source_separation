@@ -27,6 +27,11 @@ CUDA_VISIBLE_DEVICES=0 python inference.py \
 	--batch_size=2
 
 
+# 
+# train2.py  Use updated audidata dataloader
+CUDA_VISIBLE_DEVICES=7 python train2.py --model_name=BSRoformer21a    --clip_duration=4.0     --batch_size=4  --lr=3e-4
+CUDA_VISIBLE_DEVICES=5,7 accelerate launch --multi_gpu --num_processes 2 --main_process_port 13131 train2_accelerate_bf16.py --model_name=BSRoformer21a --clip_duration=4.0 --batch_size=4 --lr=3e-4
+
 ####
 CUDA_VISIBLE_DEVICES=1 python train_enc_dec.py --model_name=EncDec --clip_duration=4.0 --batch_size=4 --lr=3e-4
 
@@ -46,5 +51,10 @@ CUDA_VISIBLE_DEVICES=1 python train_enc_dec.py --model_name=EncDec --clip_durati
 # BSRoformer13a	mel, L=12, clip=4, bs=4, others same as 10a, ema=
 # BSRoformer14a	mel, L=12, clip=4, bs=4, full Transformer, ema=8.2 dB
 # + BSRoformer15a	10b, mel, L=12, patch=(1, 4), clip=3, bs=2, ema=10.9 dB
-# + BSRoformer16a	10b, mel, L=12, patch=(1, 1), clip=3, bs=1, ema=
-# BSRoformer17a	Transformer-UNet, clip=4, bs=2, ema=
+# + BSRoformer16a	10b, mel, L=12, patch=(1, 1), clip=3, bs=1, ema=11.8 dB
+# - BSRoformer17a	Transformer-UNet, clip=4, bs=2, ema=
+# - BSRoformer17b	BSTransformer, patch=(1,1), 10L, clip=2, bs=1, ema=
+# BSRoformer18a	BSTransformer, patch=(1,1), 12L, clip=2, bs=1, ema=
+# BSRoformer19a	Transformer-UNet, clip=2, bs=2, ema=
+# BSRoformer20a	Transformer-UNet x 4, clip=2, bs=2, ema=
+# BSRoformer21a patch=(4, 4), compare new MUSDB18HQ dataset
