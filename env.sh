@@ -1,9 +1,0 @@
-pip install librosa==0.10.2.post1
-pip install museval
-pip install numpy==1.24.4
-pip install torch==2.4.0
-pip install wandb==0.17.5
-pip install torchaudio==2.4.0
-pip install einops==0.8.0
-pip install accelerate==0.33.0
-pip install rotary-embedding-torch
