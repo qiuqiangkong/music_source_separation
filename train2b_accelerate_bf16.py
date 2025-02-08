@@ -20,9 +20,12 @@ import wandb
 
 wandb.require("core")
 
-from audidata.datasets import MUSDB18HQ
-from audidata.io import RandomCrop
-from audidata.samplers import InfiniteSampler, MUSDB18HQ_RandomSongSampler
+# from audidata.datasets import MUSDB18HQ
+# from audidata.io import RandomCrop
+# from audidata.samplers import InfiniteSampler, MUSDB18HQ_RandomSongSampler
+from data.audio import load
+from data.musdb18hq import MUSDB18HQ
+from data.crops import RandomCrop
 from train import InfiniteSampler, get_model, l1_loss, warmup_lambda
 from train2 import validate
 from utils import update_ema, requires_grad
@@ -44,10 +47,11 @@ def train(args):
     use_scheduler = True
     test_step_frequency = 5000
     save_step_frequency = 10000
-    evaluate_num = 1
+    evaluate_num = 10
     training_steps = 1000000
     wandb_log = True
     device = "cuda"
+    stems = ["vocals", "bass", "drums", "other"]
     target_stems = ["vocals"]
     sampler_type = "full_remix"
 
@@ -57,27 +61,48 @@ def train(args):
     
     root = "/datasets/musdb18hq"
 
+    # # Training dataset
+    # train_dataset = MUSDB18HQ(
+    #     root=root,
+    #     split="train",
+    #     sr=sr,
+    #     crop=RandomCrop(clip_duration=clip_duration, end_pad=0.),
+    #     target_stems=target_stems,
+    #     time_align="group",
+    #     mixture_transform=None,
+    #     group_transform=None,
+    #     stem_transform=None
+    # )
+    # stems = train_dataset.stems
+
+    # # Samplers
+    # if sampler_type == "infinite":
+    #     train_sampler = InfiniteSampler(train_dataset)
+    # elif sampler_type == "full_remix":
+    #     train_sampler = MUSDB18HQ_RandomSongSampler(train_dataset)
+    # else:
+    #     raise ValueError(sampler_type)
+
+    # # Dataloaders
+    # train_dataloader = DataLoader(
+    #     dataset=train_dataset, 
+    #     batch_size=batch_size, 
+    #     sampler=train_sampler,
+    #     num_workers=num_workers, 
+    #     pin_memory=pin_memory
+    # )
+
     # Training dataset
     train_dataset = MUSDB18HQ(
         root=root,
         split="train",
         sr=sr,
         crop=RandomCrop(clip_duration=clip_duration, end_pad=0.),
-        target_stems=target_stems,
-        time_align="group",
-        mixture_transform=None,
-        group_transform=None,
-        stem_transform=None
+        remix={"no_remix": 0., "half_remix": 1.0, "full_remix": 0.}
     )
-    stems = train_dataset.stems
 
     # Samplers
-    if sampler_type == "infinite":
-        train_sampler = InfiniteSampler(train_dataset)
-    elif sampler_type == "full_remix":
-        train_sampler = MUSDB18HQ_RandomSongSampler(train_dataset)
-    else:
-        raise ValueError(sampler_type)
+    train_sampler = InfiniteSampler(train_dataset)
 
     # Dataloaders
     train_dataloader = DataLoader(
@@ -212,14 +237,6 @@ def train(args):
                         },
                         step=step
                     )
-
-        if wandb_log and step % 10 == 0 and accelerator.is_main_process:
-            wandb.log(
-                data={
-                    "train_loss": loss.item(),
-                },
-                step=step
-            )
         
         # Save model.
         if step % save_step_frequency == 0:

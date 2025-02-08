@@ -178,14 +178,6 @@ def train(args):
                     step=step
                 )
         
-        if wandb_log and step % 10 == 0:
-            wandb.log(
-                data={
-                    "train_loss": loss.item(),
-                },
-                step=step
-            )
-
         # Save model.
         if step % save_step_frequency == 0:
             checkpoint_path = Path(checkpoints_dir, "step={}.pth".format(step))

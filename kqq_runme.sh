@@ -30,7 +30,7 @@ CUDA_VISIBLE_DEVICES=0 python inference.py \
 # 
 # train2.py  Use updated audidata dataloader
 CUDA_VISIBLE_DEVICES=7 python train2.py --model_name=BSRoformer21a    --clip_duration=4.0     --batch_size=4  --lr=3e-4
-CUDA_VISIBLE_DEVICES=5,7 accelerate launch --multi_gpu --num_processes 2 --main_process_port 13131 train2_accelerate_bf16.py --model_name=BSRoformer21a --clip_duration=4.0 --batch_size=4 --lr=3e-4
+CUDA_VISIBLE_DEVICES=2,3 accelerate launch --multi_gpu --num_processes 2 --main_process_port 13131 train2_accelerate_bf16.py --model_name=BSRoformer21a --clip_duration=4.0 --batch_size=4 --lr=3e-4
 
 ####
 CUDA_VISIBLE_DEVICES=1 python train_enc_dec.py --model_name=EncDec --clip_duration=4.0 --batch_size=4 --lr=3e-4

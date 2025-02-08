@@ -47,7 +47,7 @@ def train(args):
     wandb_log = True
     device = "cuda"
     target_stems = ["vocals"]
-    sampler_type = "full_remix"
+    sampler_type = "infinite"
 
     filename = Path(__file__).stem
 
@@ -209,6 +209,7 @@ def train(args):
             break
 
 
+
 def validate(
     root: str, 
     split: Union["train", "test"], 
@@ -252,13 +253,20 @@ def validate(
 
         mixture = np.sum([data[stem] for stem in stems], axis=0)
         target = np.sum([data[stem] for stem in target_stems], axis=0)
-
+        # print("0----------")
+        # print(model.device)
+        # asdf
+        
         sep_wav = separate(
             model=model, 
             audio=mixture, 
             clip_samples=clip_samples,
             batch_size=batch_size
         )
+
+        all_sdrs = [0]
+
+        break 
 
         # Calculate SDR. Shape should be (sources_num, channels_num, audio_samples)
         (sdrs, _, _, _) = museval.evaluate([target.T], [sep_wav.T])
@@ -268,11 +276,32 @@ def validate(
 
         if verbose:
             print(audio_name, "{:.2f} dB".format(sdr))
+        
+        
 
     sdr = np.nanmedian(all_sdrs)
 
     return sdr
-        
+
+
+'''
+def validate(
+    root: str, 
+    split: Union["train", "test"], 
+    sr: int, 
+    clip_duration: float, 
+    stems: list, 
+    target_stems: str, 
+    batch_size: int, 
+    model: nn.Module, 
+    evaluate_num: Optional[int],
+    verbose: bool = False
+) -> float:
+    r"""Calculate SDR.
+    """
+
+    return 0.
+'''
 
 if __name__ == "__main__":
 
