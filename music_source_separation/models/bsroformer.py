@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from music_source_separation.models.fourier import Fourier
 from music_source_separation.models.attention import Block
 from music_source_separation.models.rope import build_rope
+from music_source_separation.models.bandsplit import BandSplit
 
 
 @dataclass
@@ -51,20 +52,20 @@ class BSRoformer(Fourier):
         self.ds_factor = self.patch_size[0]
         self.head_dim = config.n_embd // config.n_head
 
-        # STFT mel scale
-        self.stft_mel = STFTMel(
+        # Band split
+        self.bandsplit = BandSplit(
             sr=config.sr, 
-            in_channels=self.in_channels, 
             n_fft=config.n_fft, 
-            mel_bins=config.mel_bins,
+            bands_num=config.mel_bins,
+            in_channels=self.in_channels, 
             out_channels=config.mel_channels
         )
 
         # Patch STFT
         self.patch = Patch(
-            in_channels=config.mel_channels * np.prod(self.patch_size),
             patch_size=self.patch_size,
-            n_embd=config.n_embd
+            in_channels=config.mel_channels * np.prod(self.patch_size),
+            out_channels=config.n_embd
         )
 
         # Transformer blocks
@@ -104,7 +105,7 @@ class BSRoformer(Fourier):
         x, pad_t = self.pad_tensor(x)  # x: (b, d, t, f)
 
         # 1.3 Convert STFT to mel scale
-        x = self.stft_mel.transform(x)  # shape: (b, d, t, f)
+        x = self.bandsplit.transform(x)  # shape: (b, d, t, f)
 
         # 1.4 Patchify
         x = self.patch.patchify(x)  # shape: (b, d, t, f)
@@ -127,11 +128,10 @@ class BSRoformer(Fourier):
         x = self.patch.unpatchify(x)  # shape: (b, d, t, f)
 
         # 3.2 Convert mel scale STFT to original STFT
-        x = self.stft_mel.inverse_transform(x)  # shape: (b, d, t, f)
+        x = self.bandsplit.inverse_transform(x)  # shape: (b, d, t, f)
 
         # 3.3 Get complex mask
         x = rearrange(x, 'b (c k) t f -> b c t f k', k=self.cmplx_num).contiguous()
-        x = x.to(torch.float)  # compatible with bf16
         mask = torch.view_as_complex(x)  # shape: (b, c, t, f)
 
         # 3.4 Unpad mask to the original shape
@@ -178,176 +178,50 @@ class BSRoformer(Fourier):
         return x
 
 
-class STFTMel(nn.Module):
-
-    def __init__(
-        self, 
-        sr: float, 
-        in_channels: int, 
-        n_fft: int, 
-        mel_bins: int, 
-        out_channels: int
-    ):
-        super().__init__()
-
-        self.sr = sr
-        self.in_channels = in_channels
-        self.n_fft = n_fft
-        self.mel_bins = mel_bins
-
-        # Init mel banks
-        melbanks, ola_window = self.init_melbanks()
-        self.register_buffer(name='melbanks', tensor=torch.Tensor(melbanks))
-        self.register_buffer(name='ola_window', tensor=torch.Tensor(ola_window))
-
-        self.band_nets = nn.ModuleList([])
-        self.inv_band_nets = nn.ModuleList([])
-        self.nonzero_indexes = []
-        
-        for f in range(self.mel_bins):
-            
-            idxes = (self.melbanks[f] != 0).nonzero()[0]
-            self.nonzero_indexes.append(idxes)
-            
-            in_dim = len(idxes) * in_channels
-            self.band_nets.append(nn.Linear(in_dim, out_channels))
-            self.inv_band_nets.append(nn.Linear(out_channels, in_dim))
-
-    def init_melbanks(self) -> None:
-
-        melbanks = librosa.filters.mel(
-            sr=self.sr, 
-            n_fft=self.n_fft, 
-            n_mels=self.mel_bins - 2, 
-            norm=None
-        )
-
-        F = self.n_fft // 2 + 1
-
-        # The zeroth bank, e.g., [1., 0., 0., ..., 0.]
-        melbank_0 = np.zeros(F)
-        melbank_0[0] = 1.
-
-        # The last bank, e.g., [0., ..., 0., 0.18, 0.87, 1.]
-        melbank_last = np.zeros(F)
-        idx = np.argmax(melbanks[-1])
-        melbank_last[idx :] = 1. - melbanks[-1, idx :]
-
-        melbanks = np.concatenate(
-            [melbank_0[None, :], melbanks, melbank_last[None, :]], axis=0
-        )  # shape: (n_mels, f)
-
-        ola_window = np.sum(melbanks, axis=0)  # overlap add window
-        assert np.allclose(a=ola_window, b=1.)
-        self.register_buffer(name="ola_window", tensor=torch.Tensor(ola_window))
-
-        return melbanks, ola_window
-
-    def transform(self, x: torch.Tensor) -> torch.Tensor:
-        r"""Convert STFT to mel scale.
-
-        b: batch_size
-        c: channels_num
-        d: latent_dim
-        t: frames_num
-        q: nonzero values of a bank
-
-        Args:
-            x: (b, d, t, f)
-
-        Returns:
-            x: (b, d, t, f)
-        """
-
-        vs = []
-
-        for f in range(self.mel_bins):
-
-            idxes = self.nonzero_indexes[f]
-            mel_bank = self.melbanks[f, idxes]  # (q,)
-
-            stft_bank = x[:, :, :, idxes]  # (b, c, t, q)
-            v = stft_bank * mel_bank  # (b, c, t, banks)
-            v = rearrange(v, 'b c t q -> b t (c q)')
-
-            v = self.band_nets[f](v)  # (b, t, d)
-            vs.append(v)
-
-        x = torch.stack(vs, dim=2)  # (b, t, f, d)
-        x = rearrange(x, 'b t f d -> b d t f')  # (b, d, t, f)
-
-        return x
-
-    def inverse_transform(self, x: torch.Tensor) -> torch.Tensor:
-        r"""Convert mel scale STFT to STFT.
-
-        b: batch_size
-        c: channels_num
-        d: latent_dim
-        t: frames_num
-        q: nonzero values of a bank
-
-        Args:
-            x: (b, d, t, f_mel)
-
-        Outputs:
-            y: (b, c, t, f_stft)
-        """
-
-        B, _, T, _ = x.shape
-
-        y = torch.zeros(B, self.in_channels, T, self.n_fft // 2 + 1).to(x.device)
-        # shape: (b, c, t, f)
-
-        for f in range(self.mel_bins):
-
-            idxes = self.nonzero_indexes[f]
-            v = x[:, :, :, f]  # (b, d, t)
-            v = rearrange(v, 'b d t -> b t d')  # (b, t, d)
-            v = self.inv_band_nets[f](v)  # (b, t, d)
-            v = rearrange(v, 'b t (c q) -> b c t q', q=len(idxes))  # (b, c, t, q)
-            y[..., idxes] += v  # (b, c, t, f)
-
-        # Divide overlap add window
-        y /= self.ola_window
-
-        return y
-
-
 class Patch(nn.Module):
-    def __init__(self, in_channels: int, patch_size: int, n_embd: int):
+    def __init__(self, patch_size: int, in_channels: int, out_channels: int):
         super().__init__()
 
         self.patch_size = patch_size
 
-        self.fc_in = nn.Linear(in_features=in_channels, out_features=n_embd)
-        self.fc_out = nn.Linear(in_features=n_embd, out_features=in_channels)
+        self.fc_in = nn.Linear(in_features=in_channels, out_features=out_channels)
+        self.fc_out = nn.Linear(in_features=out_channels, out_features=in_channels)
 
     def patchify(self, x: torch.Tensor) -> torch.Tensor:
         r"""Patchify STFT. 
-        E.g., (b, d_in, 256, 204) -> (b, d_emb, 64, 51)
+
+        b: batch_size
+        d_in: in_channels
+        d_out: out_channels
+        t: time_frames
+        f: freq_bins
 
         Args:
             x: (b, d_in, t, f)
 
         Outputs:
-            x: (b, d_emb, t/t2, f/f2)
+            x: (b, d_out, t/t2, f/f2)
         """
 
         t2, f2 = self.patch_size
 
         x = rearrange(x, 'b d (t1 t2) (f1 f2) -> b t1 f1 (t2 f2 d)', t2=t2, f2=f2)
-        x = self.fc_in(x)  # (b, t, f, d)
+        x = self.fc_in(x)  # (b, t, f, d_out)
         x = rearrange(x, 'b t f d -> b d t f')
 
         return x
 
     def unpatchify(self, x: torch.Tensor) -> torch.Tensor:
         r"""Unpatchify STFT.
-        E.g., (b, d_emb, 64, 51) -> (b, d_in, 256, 204)
+
+        b: batch_size
+        d_in: in_channels
+        d_out: out_channels
+        t: time_frames
+        f: freq_bins
 
         Args:
-            x: (b, d_emb, t/t2, f/t2)
+            x: (b, d_out, t/t2, f/t2)
 
         Outputs:
             x: (b, d_in, t, f)
@@ -356,7 +230,7 @@ class Patch(nn.Module):
         t2, f2 = self.patch_size
         
         x = rearrange(x, 'b d t f -> b t f d')
-        x = self.fc_out(x)  # (b, t, f, d)
+        x = self.fc_out(x)  # (b, t, f, d_in)
         x = rearrange(x, 'b t1 f1 (t2 f2 d) -> b d (t1 t2) (f1 f2)', t2=t2, f2=f2)
 
         return x

@@ -49,7 +49,7 @@ musdb18hq (30 GB)
     └── ...
 </pre>
 
-### 2. Train
+## 2. Train
 
 Takes \~3 hours on 1 RTX4090 to train for 100,000 steps.
 
@@ -60,3 +60,8 @@ CUDA_VISIBLE_DEVICES=0 python train.py --config="./configs/unet.yaml"
 ```python
 CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch --multi_gpu --num_processes 4 train_accelerate.py --config="./configs/unet.yaml"
 ```
+
+## 3. Inference
+
+## 4. Evaluate
+
