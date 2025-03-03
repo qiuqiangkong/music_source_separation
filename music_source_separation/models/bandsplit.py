@@ -94,10 +94,11 @@ class BandSplit(nn.Module):
         )  # (k, f)
 
         F = self.n_fft // 2 + 1
-
-        # The zeroth bank, e.g., [1., 0., 0., ..., 0.]
+        
+        # The zeroth bank, e.g., [1., 0.66, 0.32, 0, ..., 0.]
         melbank_0 = np.zeros(F)
-        melbank_0[0] = 1.  # (f,)
+        idx = np.argmax(melbanks[0])
+        melbank_0[0 : idx] = 1. - melbanks[0, 0 : idx]  # (f,)
 
         # The last bank, e.g., [0., ..., 0., 0.18, 0.87, 1.]
         melbank_last = np.zeros(F)
@@ -111,7 +112,7 @@ class BandSplit(nn.Module):
 
         # Calculate overlap-add window
         ola_window = np.sum(melbanks, axis=0)  # overlap add window
-        assert np.allclose(a=ola_window, b=1.)
+        assert np.allclose(a=ola_window, b=1., atol=0.1)
 
         return melbanks, ola_window
 

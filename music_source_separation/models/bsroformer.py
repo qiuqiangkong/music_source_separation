@@ -173,7 +173,8 @@ class BSRoformer(Fourier):
         """
 
         # Unpad last frames, e.g., 204 -> 201
-        x = x[:, :, 0 : -pad_t, :]
+        if pad_t > 0:
+            x = x[:, :, 0 : -pad_t, :]
 
         return x
 
