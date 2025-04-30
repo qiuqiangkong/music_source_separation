@@ -155,7 +155,7 @@ class BandSplit(nn.Module):
         x = rearrange(x, 'b c t (k w) -> b t k (w c)', k=self.bands_num)  # (b, t, k, w*c)
 
         # Apply individual MLP on each band
-        x = self.pre_bandnet(x)  # (b, t, k, d)        
+        # x = self.pre_bandnet(x)  # (b, t, k, d)        
         x = rearrange(x, 'b t k d -> b d t k')  # (b, d, t, k)
 
         return x
@@ -180,7 +180,7 @@ class BandSplit(nn.Module):
 
         # Apply individual MLP on each band
         x = rearrange(x, 'b d t k -> b t k d')  # (b, t, k, d_in)
-        x = self.post_bandnet(x)  # (b, t, k, w*c)
+        # x = self.post_bandnet(x)  # (b, t, k, w*c)
         x = rearrange(x, 'b t k (w c) -> b c t (k w)', c=self.in_channels)  # (b, c, t, k*w)
 
         # Band combine

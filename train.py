@@ -157,7 +157,7 @@ def train(args) -> None:
 
         if step == configs["train"]["training_steps"]:
             break
-        
+
 def get_dataset(
     configs: dict, 
     split: str
@@ -254,6 +254,15 @@ def get_model(
             n_embd=configs["model"]["n_embd"],
         )
         model = BSRoformer(config)        
+
+    elif name == "BSRoformer9a":
+
+        import ast
+        from music_source_separation.models.bsroformer9a import BSRoformer9a, BSRoformerConfig
+
+        config = BSRoformerConfig(**configs["model"])
+        # from IPython import embed; embed(using=False); os._exit(0)
+        model = BSRoformer9a(config)
 
     else:
         raise ValueError(name)    

@@ -1,0 +1,35 @@
+---
+sample_rate: 44100
+clip_duration: 2.
+target_stem: "vocals"
+
+train_datasets:
+    MUSDB18HQ:
+        root: "/datasets/musdb18hq"
+        split: "train"
+
+test_datasets:
+    MUSDB18HQ:
+        root: "/datasets/musdb18hq"
+        split: "test"
+        
+sampler: InfiniteSampler
+
+model:
+    name: UNet
+    n_fft: 2048 
+    hop_length: 441
+
+train:
+    device: cuda
+    num_workers: 16
+    precision: "no"  # "no" (fp32) | "fp8" | "fp16" | bf16 
+    loss: l1
+    optimizer: AdamW
+    lr: 1e-3
+    warm_up_steps: 1000  # Leave blank if no warm up is used
+    batch_size_per_device: 16
+    test_every_n_steps: 5000
+    save_every_n_steps: 20000
+    training_steps: 200000
+    resume_ckpt_path:  # Leave blank if train from scratch
