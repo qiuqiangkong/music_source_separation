@@ -86,7 +86,7 @@ def train(args) -> None:
 
         # 1.1 Forward
         model.train()
-        output = model(mixture)
+        output = model(mixture, target)
 
         # 1.2 Loss
         loss = loss_fn(output=output, target=target)
@@ -370,6 +370,7 @@ def validate(
         output = separate(
             model=model, 
             audio=data["mixture"], 
+            target=data[target_stem],
             clip_samples=clip_samples, 
             batch_size=batch_size
         )  # shape: (c, l)
@@ -385,6 +386,7 @@ def validate(
 def separate(
     model: nn.Module, 
     audio: torch.Tensor, 
+    target: torch.Tensor,
     clip_samples: int, 
     batch_size: int
 ):
@@ -410,6 +412,7 @@ def separate(
     audio_samples = audio.shape[1]
     full_samples = round(np.ceil(audio_samples / clip_samples) * clip_samples)
     audio = librosa.util.fix_length(data=audio, size=full_samples, axis=-1)
+    target = librosa.util.fix_length(data=target, size=full_samples, axis=-1)
     # shape: (c, n*t)
 
     clips = librosa.util.frame(
@@ -418,8 +421,16 @@ def separate(
         hop_length=clip_samples
     )  # shape: (c, t, n)
 
+    clips_tar = librosa.util.frame(
+        target, 
+        frame_length=clip_samples, 
+        hop_length=clip_samples
+    )  # shape: (c, t, n)
+
     clips = clips.transpose(2, 0, 1)  # shape: (n, c, t)
     clips = torch.Tensor(clips.copy()).to(device)
+    clips_tar = clips_tar.transpose(2, 0, 1)  # shape: (n, c, t)
+    clips_tar = torch.Tensor(clips_tar.copy()).to(device)
     clips_num = clips.shape[0]
 
     pointer = 0
@@ -428,11 +439,12 @@ def separate(
     while pointer < clips_num:
 
         batch_clips = torch.Tensor(clips[pointer : pointer + batch_size])
+        batch_clips_tar = torch.Tensor(clips_tar[pointer : pointer + batch_size])
         # shape: (b, c, t)
 
         with torch.no_grad():
             model.eval()
-            batch_output = model(batch_clips)
+            batch_output = model(batch_clips, batch_clips_tar)
             batch_output = batch_output.cpu().numpy()  # shape: (b, c, t)
 
         outputs.append(batch_output)

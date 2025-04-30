@@ -47,7 +47,7 @@ class BSRoformer(Fourier):
             normalized=True
         )
 
-        self.cmplx_num = 2
+        self.cmplx_num = 1
         self.in_channels = config.audio_channels * self.cmplx_num
         self.fps = config.sr // config.hop_length
 
@@ -81,7 +81,7 @@ class BSRoformer(Fourier):
         self.register_buffer(name="t_rope", tensor=t_rope)  # shape: (t, head_dim/2, 2)
         self.register_buffer(name="f_rope", tensor=f_rope)  # shape: (t, head_dim/2, 2)
 
-    def forward(self, audio: torch.Tensor) -> torch.Tensor:
+    def forward(self, audio: torch.Tensor, target) -> torch.Tensor:
         """Separation model.
 
         b: batch_size
@@ -100,9 +100,12 @@ class BSRoformer(Fourier):
         # --- 1. Encode ---
         # 1.1 Complex spectrum
         complex_sp = self.stft(audio)  # shape: (b, c, t, f)
+        complex_sp_tar = self.stft(target)
 
-        x = torch.view_as_real(complex_sp)  # shape: (b, c, t, f, 2)
-        x = rearrange(x, 'b c t f k -> b (c k) t f')  # shape: (b, d, t, f)
+        x = torch.abs(complex_sp)
+
+        # x = torch.view_as_real(complex_sp)  # shape: (b, c, t, f, 2)
+        # x = rearrange(x, 'b c t f k -> b (c k) t f')  # shape: (b, d, t, f)
 
         # 1.2 Pad stft
         x, pad_t = self.pad_tensor(x)  # x: (b, d, t, f)
@@ -133,18 +136,13 @@ class BSRoformer(Fourier):
         # 3.2 Convert mel scale STFT to original STFT
         x = self.bandsplit.inverse_transform(x)  # shape: (b, d, t, f)
 
-        # 3.3 Get complex mask
-        x = rearrange(x, 'b (c k) t f -> b c t f k', k=self.cmplx_num).contiguous()
-        mask = torch.view_as_complex(x)  # shape: (b, c, t, f)
-
         # 3.4 Unpad mask to the original shape
-        mask = self.unpad_tensor(mask, pad_t)  # shape: (b, c, t, f)
+        x = self.unpad_tensor(x, pad_t)  # shape: (b, c, t, f)
 
-        # 3.5 Calculate stft of separated audio
-        sep_stft = mask * complex_sp  # shape: (b, c, t, f)
+        x = x * torch.exp(1.j * torch.angle(complex_sp_tar))
 
         # 3.6 ISTFT
-        output = self.istft(sep_stft)  # shape: (b, c, l)
+        output = self.istft(x)  # shape: (b, c, l)
 
         return output
 

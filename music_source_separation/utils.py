@@ -4,7 +4,6 @@ from collections import OrderedDict
 from typing import Literal
 
 import librosa
-import museval
 import numpy as np
 import torch
 import yaml
@@ -72,6 +71,8 @@ def calculate_sdr(
     Returns:
         sdr: float
     """
+
+    import museval
 
     museval_sr = 44100
     output = librosa.resample(y=output, orig_sr=sr, target_sr=museval_sr)  # (c, l)
