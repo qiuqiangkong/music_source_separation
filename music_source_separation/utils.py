@@ -72,14 +72,14 @@ def calculate_sdr(
         sdr: float
     """
 
-    import museval
-
     museval_sr = 44100
     output = librosa.resample(y=output, orig_sr=sr, target_sr=museval_sr)  # (c, l)
     target = librosa.resample(y=target, orig_sr=sr, target_sr=museval_sr)  # (c, l)
 
     if mode == "default":
         # Calculate SDR with official museval package
+        import museval
+        
         (sdrs, _, _, _) = museval.evaluate(
             references=target.T[None, :, :],  # shape: (sources_num, l, c)
             estimates=output.T[None, :, :]  # shape: (sources_num, l, c)
