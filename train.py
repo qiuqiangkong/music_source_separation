@@ -104,6 +104,7 @@ def train(args) -> None:
         if step % 100 == 0:
             print(loss)
 
+        
         # ------ 2. Evaluation ------
         # 2.1 Evaluate
         if step % configs["train"]["test_every_n_steps"] == 0:
@@ -157,6 +158,7 @@ def train(args) -> None:
 
         if step == configs["train"]["training_steps"]:
             break
+        
 
 def get_dataset(
     configs: dict, 
@@ -239,20 +241,22 @@ def get_model(
 
     elif name == "BSRoformer":
 
-        import ast
+        # import ast
         from music_source_separation.models.bsroformer import BSRoformer, BSRoformerConfig
 
-        config = BSRoformerConfig(
-            sr=configs["sample_rate"],
-            n_fft=configs["model"]["n_fft"],
-            hop_length=configs["model"]["hop_length"],
-            mel_bins=configs["model"]["mel_bins"],
-            mel_channels=configs["model"]["mel_channels"],
-            patch_size=ast.literal_eval(configs["model"]["patch_size"]),
-            n_layer=configs["model"]["n_layer"],
-            n_head=configs["model"]["n_head"],
-            n_embd=configs["model"]["n_embd"],
-        )
+        config = BSRoformerConfig(**configs["model"])
+
+        # config = BSRoformerConfig(
+        #     sr=configs["sample_rate"],
+        #     n_fft=configs["model"]["n_fft"],
+        #     hop_length=configs["model"]["hop_length"],
+        #     mel_bins=configs["model"]["mel_bins"],
+        #     mel_channels=configs["model"]["mel_channels"],
+        #     patch_size=ast.literal_eval(configs["model"]["patch_size"]),
+        #     n_layer=configs["model"]["n_layer"],
+        #     n_head=configs["model"]["n_head"],
+        #     n_embd=configs["model"]["n_embd"],
+        # )
         model = BSRoformer(config)        
 
     elif name == "BSRoformer9a":

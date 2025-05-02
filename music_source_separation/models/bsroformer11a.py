@@ -141,6 +141,8 @@ class BSRoformer(Fourier):
 
         x = x * torch.exp(1.j * torch.angle(complex_sp_tar))
 
+        # from IPython import embed; embed(using=False); os._exit(0)
+
         # 3.6 ISTFT
         output = self.istft(x)  # shape: (b, c, l)
 

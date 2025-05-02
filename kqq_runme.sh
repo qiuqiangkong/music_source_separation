@@ -28,4 +28,4 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 accelerate launch --multi_gpu --num_processes 4 tra
 # 09a.yaml    BSRoformer, t=201, f=64, patch=(1,1), gpu=1, bs=4 MUSDB18HQ_RandomSongSampler
 # 10a.yaml    BSRoformer, t=201, f=256, patch=(4,4), gpu=1, bs=4 MUSDB18HQ_RandomSongSampler
 
-# 11a.yaml	  train2.py, Use oracle phase. others same as 10a
+# 11a.yaml	  train2.py, Use oracle phase. others same as 10a, tr=13.5, te=12.0

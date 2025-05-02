@@ -5,12 +5,12 @@ target_stem: "vocals"
 
 train_datasets:
     MUSDB18HQ:
-        root: "/datasets/musdb18hq"
+        root: "./datasets/musdb18hq"
         split: "train"
 
 test_datasets:
     MUSDB18HQ:
-        root: "/datasets/musdb18hq"
+        root: "./datasets/musdb18hq"
         split: "test"
         
 sampler: MUSDB18HQ_RandomSongSampler
