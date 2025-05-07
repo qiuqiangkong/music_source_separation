@@ -30,7 +30,7 @@ class LinearWarmUp:
         else:
             return 1.
 
-
+'''
 @torch.no_grad()
 def update_ema(ema_model: nn.Module, model: nn.Module, decay=0.999) -> None:
 
@@ -49,6 +49,15 @@ def update_ema(ema_model: nn.Module, model: nn.Module, decay=0.999) -> None:
         if buffer.dtype in [torch.long]:
             continue
         ema_buffers[name].mul_(decay).add_(buffer.data, alpha=1 - decay)
+'''
+
+@torch.no_grad()
+def update_ema(ema_model, model, decay=0.999):
+    ema_params = OrderedDict(ema_model.named_parameters())
+    model_params = OrderedDict(model.named_parameters())
+
+    for name, param in model_params.items():
+        ema_params[name].mul_(decay).add_(param.data, alpha=1 - decay)
 
 
 def requires_grad(model: nn.Module, flag=True) -> None:

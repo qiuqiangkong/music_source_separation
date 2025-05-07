@@ -104,7 +104,6 @@ def train(args) -> None:
         if step % 100 == 0:
             print(loss)
 
-        
         # ------ 2. Evaluation ------
         # 2.1 Evaluate
         if step % configs["train"]["test_every_n_steps"] == 0:
@@ -158,7 +157,7 @@ def train(args) -> None:
 
         if step == configs["train"]["training_steps"]:
             break
-        
+
 
 def get_dataset(
     configs: dict, 
@@ -280,6 +279,96 @@ def get_model(
         config = BSRoformerConfig(**configs["model"])
         model = BSRoformer(config)
 
+    elif name == "BSRoformer12a":
+
+        from music_source_separation.models.bsroformer12a import BSRoformer, BSRoformerConfig
+
+        config = BSRoformerConfig(**configs["model"])
+        model = BSRoformer(config)
+
+    elif name == "BSRoformer15a":
+
+        from music_source_separation.models.bsroformer15a import BSRoformer, BSRoformerConfig
+
+        config = BSRoformerConfig(**configs["model"])
+        model = BSRoformer(config)
+
+    elif name == "BSRoformer16a":
+
+        from music_source_separation.models.bsroformer16a import BSRoformer, BSRoformerConfig
+
+        config = BSRoformerConfig(**configs["model"])
+        model = BSRoformer(config)
+
+    elif name == "BSRoformer16b":
+
+        from music_source_separation.models.bsroformer16b import BSRoformer, BSRoformerConfig
+
+        config = BSRoformerConfig(**configs["model"])
+        model = BSRoformer(config)
+
+    elif name == "BSRoformer17a":
+
+        from music_source_separation.models.bsroformer17a import BSRoformer, BSRoformerConfig
+
+        config = BSRoformerConfig(**configs["model"]) 
+        model = BSRoformer(config)
+
+    elif name == "BSRoformer18a":
+
+        from music_source_separation.models.bsroformer18a import BSRoformer, BSRoformerConfig
+
+        config = BSRoformerConfig(**configs["model"]) 
+        model = BSRoformer(config)
+
+    elif name == "BSRoformer19a":
+
+        from music_source_separation.models.bsroformer19a import BSRoformer, BSRoformerConfig
+
+        config = BSRoformerConfig(**configs["model"]) 
+        model = BSRoformer(config)
+
+    elif name == "BSRoformer20a":
+
+        from music_source_separation.models.bsroformer20a import BSRoformer, BSRoformerConfig
+
+        config = BSRoformerConfig(**configs["model"]) 
+        model = BSRoformer(config)
+
+    elif name == "BSRoformer21a":
+
+        from music_source_separation.models.bsroformer21a import BSRoformer, BSRoformerConfig
+
+        config = BSRoformerConfig(**configs["model"]) 
+        model = BSRoformer(config)
+
+    elif name == "BSRoformer21b":
+
+        from music_source_separation.models.bsroformer21b import BSRoformer, BSRoformerConfig
+
+        config = BSRoformerConfig(**configs["model"]) 
+        model = BSRoformer(config)
+
+    elif name == "BSRoformer21c":
+
+        from music_source_separation.models.bsroformer21c import BSRoformer, BSRoformerConfig
+
+        config = BSRoformerConfig(**configs["model"]) 
+        model = BSRoformer(config)
+
+    elif name == "BSRoformerV1Deprecated15a":
+
+        from music_source_separation.models_v1_deprecated.bs_roformer15 import BSRoformer15a
+
+        model = BSRoformer15a(input_channels=2)
+
+
+    # elif name == "BSRoformerV1Deprecated18a":
+
+    #     from music_source_separation.models_v1_deprecated.bs_roformer18 import BSRoformer18a
+
+    #     model = BSRoformer18a(input_channels=2)
+
     else:
         raise ValueError(name)    
 
@@ -298,6 +387,16 @@ def get_loss_fn(configs: dict) -> callable:
     if loss_type == "l1":
         from music_source_separation.losses import l1_loss
         return l1_loss
+
+    elif loss_type == "wav_stft_l1":
+        from music_source_separation.losses import WavStft_L1
+        loss_func = WavStft_L1()
+        return loss_func
+
+    elif loss_type == "wav_l1_sdr":
+        from music_source_separation.losses import Wav_L1_Sdr
+        loss_func = Wav_L1_Sdr()
+        return loss_func
 
     else:
         raise ValueError(loss_type)

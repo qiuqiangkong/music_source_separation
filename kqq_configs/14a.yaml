@@ -1,0 +1,41 @@
+---
+sample_rate: 44100
+clip_duration: 2.
+target_stem: "vocals"
+
+train_datasets:
+    MUSDB18HQ:
+        root: "./datasets/musdb18hq"
+        split: "train"
+
+test_datasets:
+    MUSDB18HQ:
+        root: "./datasets/musdb18hq"
+        split: "test"
+        
+sampler: MUSDB18HQ_RandomSongSampler
+
+model:
+    name: BSRoformer11a
+    n_fft: 2048 
+    hop_length: 441
+    mel_bins: 256
+    mel_channels: 64
+    patch_size: [4, 4]
+    n_layer: 12
+    n_head: 12
+    n_embd: 384
+
+train:
+    device: cuda
+    num_workers: 16
+    precision: "bf16"  # "no" (fp32) | "fp8" | "fp16" | bf16 
+    loss: wav_l1_sdr
+    optimizer: AdamW
+    lr: 3e-4
+    warm_up_steps: 1000  # Leave blank if no warm up is used
+    batch_size_per_device: 4
+    test_every_n_steps: 20000
+    save_every_n_steps: 50000
+    training_steps: 2000000
+    resume_ckpt_path:  # Leave blank if train from scratch

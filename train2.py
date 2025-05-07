@@ -18,6 +18,8 @@ import wandb
 from music_source_separation.utils import (LinearWarmUp, calculate_sdr,
     parse_yaml, requires_grad, update_ema)
 
+from train import get_loss_fn, get_model
+
 
 def train(args) -> None:
     r"""Train a music source separation system."""
@@ -220,73 +222,60 @@ def get_sampler(configs: dict, dataset: Dataset) -> Iterable:
         raise ValueError(name)
 
 
-def get_model(
-    configs: dict, 
-    ckpt_path: str
-) -> nn.Module:
-    r"""Initialize model."""
+# def get_model(
+#     configs: dict, 
+#     ckpt_path: str
+# ) -> nn.Module:
+#     r"""Initialize model."""
 
-    name = configs["model"]["name"]
+#     name = configs["model"]["name"]
 
-    if name == "UNet":
+#     if name == "UNet":
 
-        from music_source_separation.models.unet import UNet, UNetConfig
+#         from music_source_separation.models.unet import UNet, UNetConfig
 
-        config = UNetConfig(
-            n_fft=configs["model"]["n_fft"],
-            hop_length=configs["model"]["hop_length"],
-        )
-        model = UNet(config)
+#         config = UNetConfig(
+#             n_fft=configs["model"]["n_fft"],
+#             hop_length=configs["model"]["hop_length"],
+#         )
+#         model = UNet(config)
 
-    elif name == "BSRoformer":
+#     elif name == "BSRoformer":
 
-        from music_source_separation.models.bsroformer import BSRoformer, BSRoformerConfig
+#         from music_source_separation.models.bsroformer import BSRoformer, BSRoformerConfig
 
-        config = BSRoformerConfig(**configs["model"])
-        model = BSRoformer(config)        
+#         config = BSRoformerConfig(**configs["model"])
+#         model = BSRoformer(config)        
 
-    elif name == "BSRoformer9a":
+#     elif name == "BSRoformer9a":
 
-        from music_source_separation.models.bsroformer9a import BSRoformer9a, BSRoformerConfig
+#         from music_source_separation.models.bsroformer9a import BSRoformer9a, BSRoformerConfig
 
-        config = BSRoformerConfig(**configs["model"])
-        model = BSRoformer9a(config)
+#         config = BSRoformerConfig(**configs["model"])
+#         model = BSRoformer9a(config)
 
-    elif name == "BSRoformer10a":
+#     elif name == "BSRoformer10a":
 
-        from music_source_separation.models.bsroformer import BSRoformer, BSRoformerConfig
+#         from music_source_separation.models.bsroformer import BSRoformer, BSRoformerConfig
 
-        config = BSRoformerConfig(**configs["model"])
-        model = BSRoformer(config)
+#         config = BSRoformerConfig(**configs["model"])
+#         model = BSRoformer(config)
 
-    elif name == "BSRoformer11a":
+#     elif name == "BSRoformer11a":
 
-        from music_source_separation.models.bsroformer11a import BSRoformer, BSRoformerConfig
+#         from music_source_separation.models.bsroformer11a import BSRoformer, BSRoformerConfig
 
-        config = BSRoformerConfig(**configs["model"])
-        model = BSRoformer(config)
+#         config = BSRoformerConfig(**configs["model"])
+#         model = BSRoformer(config)
 
-    else:
-        raise ValueError(name)    
+#     else:
+#         raise ValueError(name)    
 
-    if ckpt_path:
-        ckpt = torch.load(ckpt_path)
-        model.load_state_dict(ckpt)
+#     if ckpt_path:
+#         ckpt = torch.load(ckpt_path)
+#         model.load_state_dict(ckpt)
 
-    return model
-
-
-def get_loss_fn(configs: dict) -> callable:
-    r"""Get loss function."""
-
-    loss_type = configs["train"]["loss"]
-
-    if loss_type == "l1":
-        from music_source_separation.losses import l1_loss
-        return l1_loss
-
-    else:
-        raise ValueError(loss_type)
+#     return model
 
 
 def get_optimizer_and_scheduler(
