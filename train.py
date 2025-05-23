@@ -240,7 +240,7 @@ def get_dataset(
     
         if name == "MUSDB18HQ":
 
-            from audidata.datasets import MUSDB18HQ
+            from music_source_separation.datasets.musdb18hq import MUSDB18HQ
 
             if "augmentation" in configs[datasets_split][name].keys():
                 if configs[datasets_split][name]["augmentation"] == "volume":
