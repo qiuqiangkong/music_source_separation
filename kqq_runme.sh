@@ -41,6 +41,14 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 accelerate launch --multi_gpu --num_processes 4 tra
 # 18a.yaml	  train2, uconnection, others same as 11a, no better than 11a
 # 19a.yaml	  train2, uTransformer, others same as 11a, no better than 11a, maybe too small?
 # 20a.yaml	  train2, transformer before patch, others same as 11a
-# 21a.yaml	  train2, DC-AC (Junyan Chen), same as 11a. 
-# 22b.yaml    train2, DC-AC, compress 8x
-# 23b.yaml    train2, DC-AC, compress 16x
+# 21a.yaml	  train2, DC-AC (Junyan Chen), same as 11a.
+# 21b.yaml    train2, DC-AC, compress 8x
+# 21c.yaml    train2, DC-AC, compress 16x
+# v1_deprecated_15a_4gpus.yaml    Previous, but still te=8.86. I am thinking the sampler has problem.
+# v1_deprecated_15a_4gpus_02.yaml    Infinite sampler. Not its problem.
+
+# 破案了！SDR eval "fast" 比 "default" 通常低 1.3 dB。
+
+# + 22a_4gpus.yaml  the same as 10a_4gpus, BSRoformer, t=201, f=256, patch=(4,4), gpu=4, bs=8, te_sdr=10.0 after 300k=500k
+# + 23a_4gpus.yaml  the same as 22a_4gpus. layer=6, 0.5dB lower than 22a_4gpus
+# + 24a_4gpus.yaml  the same as 22a_4gpus, layer=24, bs=4, te=10.3 after 1M steps. Overlap_te=10.7.

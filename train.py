@@ -108,41 +108,54 @@ def train(args) -> None:
         # 2.1 Evaluate
         if step % configs["train"]["test_every_n_steps"] == 0:
 
-            train_sdr = validate(
+            train_sdr_fast = validate(
                 configs=configs,
                 model=model,
                 split="train",
-                valid_audios=10
+                valid_audios=10,
+                eval_mode="fast",
             )
 
-            test_sdr = validate(
+            test_sdr_fast = validate(
                 configs=configs,
                 model=model,
                 split="test",
-                valid_audios=None
+                valid_audios=10,
+                eval_mode="fast",
             )
 
-            test_sdr_ema = validate(
+            test_sdr_ema_fast = validate(
                 configs=configs,
                 model=ema,
                 split="test",
-                valid_audios=None
+                valid_audios=10,
+                eval_mode="fast",
+            )
+
+            test_sdr_ema_default = validate(
+                configs=configs,
+                model=ema,
+                split="test",
+                valid_audios=None,
+                eval_mode="default",
             )
 
             if wandb_log:
                 wandb.log(
                     data={
-                        "train_sdr": train_sdr, 
-                        "test_sdr": test_sdr, 
-                        "test_sdr_ema": test_sdr_ema
+                        "train_sdr_fast": train_sdr_fast, 
+                        "test_sdr_fast": test_sdr_fast, 
+                        "test_sdr_ema_fast": test_sdr_ema_fast,
+                        "test_sdr_ema_default": test_sdr_ema_default
                     },
                     step=step
                 )
 
             print("====== Overall metrics ====== ")
-            print("Train SDR: {}".format(train_sdr))
-            print("Test SDR: {}".format(test_sdr))
-            print("Test SDR ema: {}".format(test_sdr_ema))
+            print("Train SDR fast: {}".format(train_sdr_fast))
+            print("Test SDR fast: {}".format(test_sdr_fast))
+            print("Test SDR ema fast: {}".format(test_sdr_ema_fast))
+            print("Test SDR ema default: {}".format(test_sdr_ema_default))
         
         # 2.2 Save model
         if step % configs["train"]["save_every_n_steps"] == 0:
@@ -157,6 +170,55 @@ def train(args) -> None:
 
         if step == configs["train"]["training_steps"]:
             break
+
+
+'''
+def get_dataset(
+    configs: dict, 
+    split: str
+) -> Dataset:
+    r"""Get datasets."""
+
+    from audidata.io.crops import RandomCrop
+
+    sr = configs["sample_rate"]
+    clip_duration = configs["clip_duration"]
+    target_stem = configs["target_stem"]
+    datasets_split = "{}_datasets".format(split)
+
+    datasets = []
+    
+    for name in configs[datasets_split].keys():
+    
+        if name == "MUSDB18HQ":
+
+            from audidata.datasets import MUSDB18HQ
+
+            # from IPython import embed; embed(using=False); os._exit(0)
+
+            dataset = MUSDB18HQ(
+                root=configs[datasets_split][name]["root"],
+                split=configs[datasets_split][name]["split"],
+                sr=sr,
+                crop=RandomCrop(clip_duration=clip_duration, end_pad=0.),
+                target_stems=[target_stem],
+                time_align="group",
+                mixture_transform=None,
+                group_transform=None,
+                stem_transform=None
+            )
+            datasets.append(dataset)
+
+        else:
+            raise ValueError(name)
+
+    if len(datasets) == 1:
+        return datasets[0]
+
+    else:
+        raise ValueError("Do not support multiple datasets in this file.")
+'''
+
 
 
 def get_dataset(
@@ -180,6 +242,16 @@ def get_dataset(
 
             from audidata.datasets import MUSDB18HQ
 
+            if "augmentation" in configs[datasets_split][name].keys():
+                if configs[datasets_split][name]["augmentation"] == "volume":
+                    from music_source_separation.augmentations.random_gain import RandomGain
+                    group_transform = RandomGain()
+                else:
+                    raise NotImplementedError
+
+            else:
+                group_transform = None
+
             dataset = MUSDB18HQ(
                 root=configs[datasets_split][name]["root"],
                 split=configs[datasets_split][name]["split"],
@@ -188,7 +260,7 @@ def get_dataset(
                 target_stems=[target_stem],
                 time_align="group",
                 mixture_transform=None,
-                group_transform=None,
+                group_transform=group_transform,
                 stem_transform=None
             )
             datasets.append(dataset)
@@ -245,17 +317,6 @@ def get_model(
 
         config = BSRoformerConfig(**configs["model"])
 
-        # config = BSRoformerConfig(
-        #     sr=configs["sample_rate"],
-        #     n_fft=configs["model"]["n_fft"],
-        #     hop_length=configs["model"]["hop_length"],
-        #     mel_bins=configs["model"]["mel_bins"],
-        #     mel_channels=configs["model"]["mel_channels"],
-        #     patch_size=ast.literal_eval(configs["model"]["patch_size"]),
-        #     n_layer=configs["model"]["n_layer"],
-        #     n_head=configs["model"]["n_head"],
-        #     n_embd=configs["model"]["n_embd"],
-        # )
         model = BSRoformer(config)        
 
     elif name == "BSRoformer9a":
@@ -362,6 +423,12 @@ def get_model(
 
         model = BSRoformer15a(input_channels=2)
 
+    elif name == "BSRoformer22a":
+
+        from music_source_separation.models.bsroformer import BSRoformer, BSRoformerConfig
+
+        config = BSRoformerConfig(**configs["model"]) 
+        model = BSRoformer(config)
 
     # elif name == "BSRoformerV1Deprecated18a":
 
@@ -428,7 +495,8 @@ def validate(
     configs: dict,
     model: nn.Module,
     split: str,
-    valid_audios: None | int = None
+    valid_audios: None | int = None,
+    eval_mode: str = "default"
 ) -> float:
     r"""Validate the model on part of data.
 
@@ -477,7 +545,7 @@ def validate(
             batch_size=batch_size
         )  # shape: (c, l)
 
-        sdr = calculate_sdr(output=output, target=data[target_stem], sr=sr, mode="fast")
+        sdr = calculate_sdr(output=output, target=data[target_stem], sr=sr, mode=eval_mode)
         print("{}/{}, {}: {:.3f}".format(idx, len(audio_names), audio_name, sdr))
 
         sdrs.append(sdr)

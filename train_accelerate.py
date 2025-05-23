@@ -5,7 +5,8 @@ from copy import deepcopy
 from pathlib import Path
 
 import torch
-from accelerate import Accelerator
+from accelerate import Accelerator, InitProcessGroupKwargs
+from datetime import timedelta
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -68,7 +69,9 @@ def train(args) -> None:
     )
 
     # Prepare for acceleration
-    accelerator = Accelerator(mixed_precision=configs["train"]["precision"])
+    # accelerator = Accelerator(mixed_precision=configs["train"]["precision"])
+    process_group_kwargs = InitProcessGroupKwargs(timeout=timedelta(seconds=7200))
+    accelerator = Accelerator(mixed_precision=configs["train"]["precision"], kwargs_handlers=[process_group_kwargs])
 
     model, ema, optimizer, train_dataloader = accelerator.prepare(
         model, ema, optimizer, train_dataloader)
@@ -109,41 +112,54 @@ def train(args) -> None:
         # 2.1 Evaluate
         if step % configs["train"]["test_every_n_steps"] == 0 and accelerator.is_main_process:
 
-            train_sdr = validate(
+            train_sdr_fast = validate(
                 configs=configs,
                 model=accelerator.unwrap_model(model),
                 split="train",
-                valid_audios=10
+                valid_audios=10,
+                eval_mode="fast",
             )
 
-            test_sdr = validate(
+            test_sdr_fast = validate(
                 configs=configs,
                 model=accelerator.unwrap_model(model),
                 split="test",
-                valid_audios=None
+                valid_audios=10,
+                eval_mode="fast",
             )
 
-            test_sdr_ema = validate(
+            test_sdr_ema_fast = validate(
                 configs=configs,
                 model=accelerator.unwrap_model(ema),
                 split="test",
-                valid_audios=None
+                valid_audios=10,
+                eval_mode="fast",
+            )
+
+            test_sdr_ema_default = validate(
+                configs=configs,
+                model=accelerator.unwrap_model(ema),
+                split="test",
+                valid_audios=None,
+                eval_mode="default",
             )
 
             if wandb_log:
                 wandb.log(
                     data={
-                        "train_sdr": train_sdr, 
-                        "test_sdr": test_sdr, 
-                        "test_sdr_ema": test_sdr_ema
+                        "train_sdr_fast": train_sdr_fast, 
+                        "test_sdr_fast": test_sdr_fast, 
+                        "test_sdr_ema_fast": test_sdr_ema_fast,
+                        "test_sdr_ema_default": test_sdr_ema_default
                     },
                     step=step
                 )
 
             print("====== Overall metrics ====== ")
-            print("Train SDR: {}".format(train_sdr))
-            print("Test SDR: {}".format(test_sdr))
-            print("Test SDR ema: {}".format(test_sdr_ema))
+            print("Train SDR fast: {}".format(train_sdr_fast))
+            print("Test SDR fast: {}".format(test_sdr_fast))
+            print("Test SDR ema fast: {}".format(test_sdr_ema_fast))
+            print("Test SDR ema default: {}".format(test_sdr_ema_default))
         
         # 2.2 Save model
         if step % configs["train"]["save_every_n_steps"] == 0 and accelerator.is_main_process:
@@ -158,7 +174,7 @@ def train(args) -> None:
 
         if step == configs["train"]["training_steps"]:
             break
-        
+
 
 if __name__ == "__main__":
 

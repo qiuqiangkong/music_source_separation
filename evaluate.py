@@ -85,7 +85,7 @@ def evaluate(args) -> None:
 
     print("====== Overall metrics ====== ")
     print("SDR: {}".format(np.nanmedian(sdrs)))
-    print("SDR: {}".format(np.nanmedian(fast_sdrs)))
+    print("Fast SDR: {}".format(np.nanmedian(fast_sdrs)))
 
 
 if __name__ == "__main__":
