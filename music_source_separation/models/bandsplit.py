@@ -44,6 +44,7 @@ class BandSplit(nn.Module):
         nonzero_melbanks = []  # shape: (k, w)
         
         for f in range(self.bands_num):    
+            # idxes = torch.nonzero(self.melbanks[f].abs() > 1e-6, as_tuple=True)[0]  # shape: (w,)
             idxes = self.melbanks[f].nonzero(as_tuple=True)[0]  # shape: (w,)
             nonzero_indexes.append(idxes)
             nonzero_melbanks.append(self.melbanks[f, idxes])

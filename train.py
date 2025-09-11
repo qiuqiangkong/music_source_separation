@@ -246,6 +246,9 @@ def get_dataset(
                 if configs[datasets_split][name]["augmentation"] == "volume":
                     from music_source_separation.augmentations.random_gain import RandomGain
                     group_transform = RandomGain()
+                elif configs[datasets_split][name]["augmentation"] == "pitch":
+                    from music_source_separation.augmentations.random_pitch import RandomPitch
+                    group_transform = RandomPitch(sr)
                 else:
                     raise NotImplementedError
 
@@ -430,11 +433,33 @@ def get_model(
         config = BSRoformerConfig(**configs["model"]) 
         model = BSRoformer(config)
 
-    # elif name == "BSRoformerV1Deprecated18a":
+    elif name == "BSRoformerLinearBand":
 
-    #     from music_source_separation.models_v1_deprecated.bs_roformer18 import BSRoformer18a
+        from music_source_separation.models.bsroformer_linear_band import BSRoformerLinearBand, BSRoformerConfig
 
-    #     model = BSRoformer18a(input_channels=2)
+        config = BSRoformerConfig(**configs["model"]) 
+        model = BSRoformerLinearBand(config)
+
+    elif name == "BSRoformerMelLinear":
+
+        from music_source_separation.models.bsroformer_mellinear import BSRoformerMelLinear, BSRoformerConfig
+
+        config = BSRoformerConfig(**configs["model"]) 
+        model = BSRoformerMelLinear(config)
+
+    elif name == "BSRoformerFull":
+
+        from music_source_separation.models.bsroformer_full import BSRoformerFull, BSRoformerConfig
+
+        config = BSRoformerConfig(**configs["model"]) 
+        model = BSRoformerFull(config)
+
+    elif name == "BSRoformerRoPE1D":
+
+        from music_source_separation.models.bsroformer_rope1d import BSRoformerRoPE1D, BSRoformerConfig
+
+        config = BSRoformerConfig(**configs["model"]) 
+        model = BSRoformerRoPE1D(config)
 
     else:
         raise ValueError(name)    

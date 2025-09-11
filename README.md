@@ -10,7 +10,7 @@ git clone https://github.com/qiuqiangkong/music_source_separation
 cd mss
 
 # Install Python environment
-conda create --name mss python=3.10
+conda create --name mss python=3.13
 
 # Activate environment
 conda activate mss

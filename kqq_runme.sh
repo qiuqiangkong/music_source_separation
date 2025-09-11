@@ -49,6 +49,13 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 accelerate launch --multi_gpu --num_processes 4 tra
 
 # 破案了！SDR eval "fast" 比 "default" 通常低 1.3 dB。
 
-# + 22a_4gpus.yaml  the same as 10a_4gpus, BSRoformer, t=201, f=256, patch=(4,4), gpu=4, bs=8, te_sdr=10.0 after 300k=500k
+# + 22a_4gpus.yaml  the same as 10a_4gpus, BSRoformer, t=201, f=256, patch=(4,4), gpu=4, bs=8, fast_tr=10.5, te_sdr=10.0 after 300k=500k
 # + 23a_4gpus.yaml  the same as 22a_4gpus. layer=6, 0.5dB lower than 22a_4gpus
-# + 24a_4gpus.yaml  the same as 22a_4gpus, layer=24, bs=4, te=10.3 after 1M steps. Overlap_te=10.7.
+# + 24a_4gpus.yaml  the same as 22a_4gpus, layer=24, bs=4, te=10.3 after 1M steps. Overlap_te=10.7
+# 25a_4gpus.yaml	the same as 22a_4gpus, volume aug, fast_tr=10.2, te=10.35, overlap_te=10.65 after 900k steps
+# 26a_4gpus.yaml	the same as 22a_4gpus, pitch aug, fast_tr=9.0, te=9.7 after 900 steps.
+# 27a_4gpus.yaml    BSRoformerLinearBand, layer=12, t=201, f=61, patch=(4,1), gpu=4, bs=8, not good.
+# 28a_4gpus.yaml    BSRoformerMelLinear, layer=6, t=201, f=120, patch=(4,1), gpu=4, bs=8, 0.5 dB lower than 22a_
+# 29a_4gpus.yaml    full Transformer, others same as 22a
+# 29b_4gpus.yaml    full Transformer, others same as 22a, 24 layers
+# 30a_4gpus.yaml	BsRoformer new RoPE, others same as 22a

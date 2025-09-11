@@ -65,14 +65,19 @@ def apply_rope(x: Tensor, rope: Tensor) -> Tensor:
 
 if __name__ == '__main__':
 
+    torch.manual_seed(1234)
+
     B = 4  # batch_size
     T = 100  # time_steps
     N = 16  # heads_num
     H = 32  # head_dim
     L = 1000  # rope_len
 
+    x = torch.rand((B, T, N, H))  # (b, t, n, h)
+
     rope = build_rope(seq_len=L, head_dim=H)  # (l, h/2, 2)
-    x = torch.Tensor(B, T, N, H)  # (b, t, n, h)
+    
+    # x = torch.Tensor(B, T, N, H)  # (b, t, n, h)
 
     # Apply RoPE
     out = apply_rope(x, rope)  # (b, t, n, h)
@@ -84,3 +89,5 @@ if __name__ == '__main__':
     axs[1].matshow(rope[:, :, 1].data.cpu().numpy().T, origin='lower', aspect='auto', cmap='jet')
     plt.savefig("rope.pdf")
     print("Write out to rope.pdf")
+
+    from IPython import embed; embed(using=False); os._exit(0)

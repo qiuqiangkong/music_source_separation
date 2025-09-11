@@ -16,7 +16,7 @@ test_datasets:
 sampler: MUSDB18HQ_RandomSongSampler
 
 model:
-    name: BSRoformer22a
+    name: BSRoformerFull
     n_fft: 2048 
     hop_length: 441
     mel_bins: 256
@@ -34,7 +34,7 @@ train:
     optimizer: AdamW
     lr: 3e-4
     warm_up_steps: 1000  # Leave blank if no warm up is used
-    batch_size_per_device: 6
+    batch_size_per_device: 8
     test_every_n_steps: 20000
     save_every_n_steps: 50000
     training_steps: 2000000
