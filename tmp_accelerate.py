@@ -109,6 +109,7 @@ def train(args) -> None:
         if step % 100 == 0 and accelerator.is_main_process:
             print(loss)
         
+        '''
         # ------ 2. Evaluation ------
         # 2.1 Evaluate
         if step % configs["train"]["test_every_n_steps"] == 0 and accelerator.is_main_process:
@@ -175,6 +176,7 @@ def train(args) -> None:
 
         if step == configs["train"]["training_steps"]:
             break
+        '''
 
 if __name__ == "__main__":
 

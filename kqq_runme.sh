@@ -59,3 +59,5 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 accelerate launch --multi_gpu --num_processes 4 tra
 # 29a_4gpus.yaml    full Transformer, others same as 22a
 # 29b_4gpus.yaml    full Transformer, others same as 22a, 24 layers
 # 30a_4gpus.yaml	BsRoformer new RoPE, others same as 22a
+
+# 31a.yaml			BSRoformer, RoPE1D, 768

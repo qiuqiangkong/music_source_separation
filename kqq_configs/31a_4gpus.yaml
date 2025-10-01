@@ -25,7 +25,7 @@ model:
     n_bands: 256
     band_dim: 64
     patch_size: [4, 4]
-    dim: 384
+    dim: 768
     n_layers: 12
     n_heads: 12
     rope_len: 8192

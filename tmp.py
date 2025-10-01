@@ -101,6 +101,7 @@ def train(args) -> None:
         if step % 100 == 0:
             print(loss)
 
+        '''
         # ------ 2. Evaluation ------
         # 2.1 Evaluate
         if step % configs["train"]["test_every_n_steps"] == 0:
@@ -163,7 +164,7 @@ def train(args) -> None:
 
         if step == configs["train"]["training_steps"]:
             break
-        
+        '''
 
 def get_dataset(
     configs: dict, 
@@ -511,6 +512,7 @@ def validate(
 
         data["mixture"] = np.sum([data[stem] for stem in stems], axis=0)  # shape: (c, l)
 
+        t1 = time.time()
         # Foward
         output = separate(
             model=model, 
@@ -518,7 +520,9 @@ def validate(
             clip_samples=clip_samples, 
             batch_size=batch_size
         )  # shape: (c, l)
-        
+        print(time.time() - t1)
+        from IPython import embed; embed(using=False); os._exit(0)
+
         sdr = calculate_sdr(output=output, target=data[target_stem], sr=sr, mode=eval_mode)
         print("{}/{}, {}: {:.3f}".format(idx, len(audio_names), audio_name, sdr))
 
