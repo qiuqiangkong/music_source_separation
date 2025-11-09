@@ -57,6 +57,10 @@ def train(args) -> None:
         ckpt_path=configs["train"]["resume_ckpt_path"]
     ).to(device)
 
+    from IPython import embed; embed(using=False); os._exit(0)
+    while True:
+        pass
+
     # EMA
     ema = deepcopy(model).to(device)
     requires_grad(ema, False)

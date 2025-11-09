@@ -73,8 +73,10 @@ def train(args) -> None:
         kwargs_handlers=[process_group_kwargs]
     )
 
-    model, ema, optimizer, train_dataloader = accelerator.prepare(
-        model, ema, optimizer, train_dataloader)
+    model, optimizer, train_dataloader = accelerator.prepare(
+        model, optimizer, train_dataloader)
+
+    ema.to(accelerator.device)
 
     # Logger
     if wandb_log and accelerator.is_main_process:
@@ -104,7 +106,7 @@ def train(args) -> None:
         optimizer.step()  # Update all parameters based on all parameter.grad
         scheduler.step()
         
-        update_ema(ema_model=ema, model=accelerator.unwrap_model(model))
+        update_ema(ema, accelerator.unwrap_model(model))
 
         if step % 100 == 0 and accelerator.is_main_process:
             print(loss)

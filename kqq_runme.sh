@@ -60,4 +60,5 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 accelerate launch --multi_gpu --num_processes 4 tra
 # 29b_4gpus.yaml    full Transformer, others same as 22a, 24 layers
 # 30a_4gpus.yaml	BsRoformer new RoPE, others same as 22a
 
-# 31a.yaml			BSRoformer, RoPE1D, 768
+# 31a_4gpus.yaml	BSRoformer, RoPE1D, 768, L=12, bs=4, te=9.98 after 600k steps
+# 32a_4gpus.yaml	Transformer1D, RoPE1D, 384, L=24, bs=8, te=9.39 after 350 steps, lower than bsroformer
