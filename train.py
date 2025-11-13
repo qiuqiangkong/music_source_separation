@@ -311,7 +311,7 @@ def validate(
             model=model, 
             audio=data["mixture"], 
             segment_samples=segment_samples,
-            hop_length=segment_samples // 4,
+            hop_length=segment_samples,
             batch_size=batch_size
         )  # (c, L)
         
@@ -321,7 +321,7 @@ def validate(
             sr=sr, 
             fast_only=fast_only
         )
-
+        
         if fast_only:
             print("{}/{}, {}: fast SDR: {:.2f} dB".format(
                 idx, len(audio_names), audio_name, fast_sdr)
@@ -334,8 +334,9 @@ def validate(
         sdrs.append(sdr)
         fast_sdrs.append(fast_sdr)
 
-    sdr = np.nanmedian(sdrs)
-    fast_sdr = None if fast_only else np.nanmedian(fast_sdrs)
+    
+    sdr = None if fast_only else np.nanmedian(sdrs)
+    fast_sdr = np.nanmedian(fast_sdrs)
 
     return sdr, fast_sdr
 

@@ -54,26 +54,26 @@ musdb18hq (30 GB)
 Takes \~3 hours on 1 RTX4090 to train for 100,000 steps.
 
 ```python
-CUDA_VISIBLE_DEVICES=0 python train.py --config="./configs/bsroformer.yaml"
+CUDA_VISIBLE_DEVICES=0 python train.py --config="./configs/small.yaml"
 ```
 
 ```python
-CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch --multi_gpu --num_processes 4 train_accelerate.py --config="./configs/unet.yaml"
+CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch --multi_gpu --num_processes 4 train_accelerate.py --config="./configs/small.yaml"
 ```
 
 ## 3. Inference
 
 ```python
 CUDA_VISIBLE_DEVICES=0 python inference.py \
-    --config="./configs/bsroformer.yaml" \
-    --ckpt_path="./checkpoints/train/bsroformer/step/step=100000_ema.pth" \
-    --audio_path="./assets/xxx.wav" \
+    --config="./configs/small.yaml" \
+    --ckpt_path="./checkpoints/train/small/step=100000_ema.pth" \
+    --audio_path="./assets/music_10s.wav" \
     --output_path="./out.wav"
 ```
 
 ## 4. Evaluate
 ```python
 CUDA_VISIBLE_DEVICES=0 python evaluate.py \
-    --config="./configs/bsroformer.yaml" \
-    --ckpt_path="./checkpoints/train/bsroformer/step/step=100000_ema.pth"
+    --config="./configs/small.yaml" \
+    --ckpt_path="./checkpoints/train/small/step=100000_ema.pth" 
 ```
