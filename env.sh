@@ -1,0 +1,10 @@
+pip install librosa==0.11.0
+pip install torch==2.9.1
+pip install torchaudio==2.9.1
+pip install tqdm==4.67.1
+pip install pyyaml==6.0.3
+pip install einops==0.8.1
+pip install wandb==0.23.0
+pip install accelerate==1.11.0
+pip install museval
+pip install trackio
