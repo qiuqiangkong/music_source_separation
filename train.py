@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 import wandb
+# import trackio as wandb
 from mss.utils import (parse_yaml, requires_grad, update_ema, LinearWarmUp, 
     separate_overlap_add, calculate_sdr)
 
@@ -30,6 +31,8 @@ def train(args) -> None:
     # Configs
     configs = parse_yaml(config_path)
     device = configs["train"]["device"]
+    valid_num = configs["validate"]["audios_num"]
+    fast_only = configs["validate"]["fast_only"]
 
     # Checkpoints directory
     config_name = Path(config_path).stem
@@ -74,7 +77,7 @@ def train(args) -> None:
 
     # Logger
     if wandb_log:
-        wandb.init(project="music_source_separation", name=f"{config_name}")
+        wandb.init(project="mss", name=f"{config_name}")
 
     # Train
     for step, data in enumerate(tqdm(train_dataloader)):
@@ -105,34 +108,40 @@ def train(args) -> None:
         # 2.1 Evaluate
         if step % configs["train"]["test_every_n_steps"] == 0:
 
-            train_sdr = validate(
+            train_sdr, train_sdr_fast = validate(
                 configs=configs,
                 model=ema,
                 split="train",
-                valid_audios=10,
-                eval_mode="default",
+                audios_num=valid_num,
+                fast_only=fast_only
             )
 
-            test_sdr = validate(
+            test_sdr, test_sdr_fast = validate(
                 configs=configs,
                 model=ema,
                 split="test",
-                valid_audios=10,
-                eval_mode="default",
+                audios_num=valid_num,
+                fast_only=fast_only
             )
 
             if wandb_log:
                 wandb.log(
                     data={
                         "train_sdr": train_sdr, 
+                        "train_sdr_fast": train_sdr_fast, 
                         "test_sdr": test_sdr,
+                        "test_sdr_fast": test_sdr_fast,
                     },
                     step=step
                 )
 
             print("====== Overall metrics ====== ")
-            print(f"Train SDR fast: {train_sdr:.2f}")
-            print(f"Test SDR fast: {train_sdr:.2f}")
+            if fast_only:
+                print(f"Train fast SDR: {train_sdr_fast:.2f}")
+                print(f"Test fast SDR: {test_sdr_fast:.2f}")
+            else:
+                print(f"Train SDR: {train_sdr:.2f}, fast SDR: {train_sdr_fast:.2f}")
+                print(f"Test SDR: {test_sdr:.2f}, fast SDR: {test_sdr_fast:.2f}")
         
         # 2.2 Save model
         if step % configs["train"]["save_every_n_steps"] == 0:
@@ -151,7 +160,9 @@ def get_dataset(
 ) -> Dataset:
     r"""Get datasets."""
 
-    from audidata.io.crops import RandomCrop
+    from mss.io.crops import RandomCrop
+
+    assert split == "train"
 
     sr = configs["sample_rate"]
     segment_duration = configs["segment_duration"]
@@ -168,7 +179,7 @@ def get_dataset(
                 sr=sr,
                 crop=RandomCrop(clip_duration=segment_duration, end_pad=0.),
                 target_stems=[target_stem],
-                time_align="group",
+                time_align=configs[ds][name]["time_align"],
                 mixture_transform=None,
                 group_transform=None,
                 stem_transform=None
@@ -252,8 +263,8 @@ def validate(
     configs: dict,
     model: nn.Module,
     split: str,
-    valid_audios: None | int = None,
-    eval_mode: str = "default"
+    audios_num: None | int = None,
+    fast_only: bool = False
 ) -> float:
     r"""Validate the model on part of data.
 
@@ -272,14 +283,15 @@ def validate(
     audios_dir = Path(root, split)
     audio_names = sorted(os.listdir(audios_dir))
 
-    if valid_audios:
+    if audios_num:
         # Evaluate only part of data
-        skip_n = max(1, len(audio_names) // valid_audios)
+        skip_n = max(1, len(audio_names) // audios_num)
     else:
         skip_n = 1
     
     stems = ["vocals", "bass", "drums", "other"]
     sdrs = []
+    fast_sdrs = []
 
     for idx in range(0, len(audio_names), skip_n):
 
@@ -303,12 +315,29 @@ def validate(
             batch_size=batch_size
         )  # (c, L)
         
-        sdr = calculate_sdr(output=output, target=data[target_stem], sr=sr, mode=eval_mode)
-        print("{}/{}, {}: {:.3f}".format(idx, len(audio_names), audio_name, sdr))
+        sdr, fast_sdr = calculate_sdr(
+            output=output, 
+            target=data[target_stem], 
+            sr=sr, 
+            fast_only=fast_only
+        )
+
+        if fast_only:
+            print("{}/{}, {}: fast SDR: {:.2f} dB".format(
+                idx, len(audio_names), audio_name, fast_sdr)
+            )
+        else:
+            print("{}/{}, {}: SDR: {:.2f} dB, fast SDR: {:.2f} dB".format(
+                idx, len(audio_names), audio_name, sdr, fast_sdr)
+            )
 
         sdrs.append(sdr)
+        fast_sdrs.append(fast_sdr)
 
-    return np.nanmedian(sdrs)
+    sdr = np.nanmedian(sdrs)
+    fast_sdr = None if fast_only else np.nanmedian(fast_sdrs)
+
+    return sdr, fast_sdr
 
 
 if __name__ == "__main__":

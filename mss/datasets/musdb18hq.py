@@ -6,8 +6,8 @@ from typing import Union
 
 import librosa
 import numpy as np
-from audidata.io.audio import load
-from audidata.io.crops import RandomCrop
+from mss.io.audio import load
+from mss.io.crops import RandomCrop
 from torch.utils.data import Dataset
 from typing_extensions import Literal
 

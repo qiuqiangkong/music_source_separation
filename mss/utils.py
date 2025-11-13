@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import yaml
 import math
+import museval
 
 from einops import rearrange
 from scipy.signal import get_window
@@ -135,46 +136,45 @@ def calculate_sdr(
     output: np.ndarray, 
     target: np.ndarray, 
     sr: float, 
-    mode: Literal["default", "fast"] = "default"
-) -> float:
+    fast_only: bool
+) -> tuple[float, float]:
     r"""Compute the SDR of separation result.
 
     c: channels_num
     L: audio_samples
+    n: segments_num
 
     Args:
-        output: (c, L)
-        target: (c, L)
+        output (np.ndarray): (c, L)
+        target (np.ndarray): (c, L)
 
     Returns:
-        sdr: float
+        sdr (float)
+        fast_sdr (float)
     """
 
     museval_sr = 44100
     output = librosa.resample(y=output, orig_sr=sr, target_sr=museval_sr)  # (c, l)
     target = librosa.resample(y=target, orig_sr=sr, target_sr=museval_sr)  # (c, l)
 
-    if mode == "default":
+    if fast_only:
+        sdr = None
+    else:
         # Compute SDR with official museval package
-        import museval
         (sdrs, _, _, _) = museval.evaluate(
             references=target.T[None, :, :],  # (sources_num, L, c)
             estimates=output.T[None, :, :]  # (sources_num, L, c)
-        )
+        )  # sdrs: (sources_num, n)
+        sdr = np.nanmedian(sdrs)
 
-    elif mode == "fast":
-        # Calculate SDR to speed up by 10 times.
-        sdrs = fast_evaluate(
-            references=target,  # (c, L)
-            estimates=output  # (c, L)
-        )
-
-    else:
-        raise ValueError(mode)
-
-    sdr = np.nanmedian(sdrs)
-
-    return sdr
+    # Fast SDR
+    fast_sdrs = fast_evaluate(
+        references=target,  # (c, L)
+        estimates=output  # (c, L)
+    )
+    fast_sdr = np.nanmedian(fast_sdrs)
+    
+    return sdr, fast_sdr
 
 
 def fast_evaluate(
@@ -193,11 +193,11 @@ def fast_evaluate(
     n: segments_num
 
     Args:
-        output: (c, L)
-        target: (c, L)
+        output (np.ndarray): (c, L)
+        target (np.ndarray): (c, L)
 
     Returns:
-        sdr: float
+        sdr (float): (n,)
     """
 
     refs = librosa.util.frame(references, frame_length=win, hop_length=hop)  # (c, l, n)
@@ -209,8 +209,8 @@ def fast_evaluate(
     for n in range(segs_num):
         sdr = fast_sdr(ref=refs[:, :, n], est=ests[:, :, n])
         sdrs.append(sdr)
-
-    return sdrs
+    
+    return np.stack(sdrs)
 
 
 def fast_sdr(

@@ -7,7 +7,7 @@ This repository contains a PyTorch implementation of music source separation sys
 ```bash
 # Clone the repo
 git clone https://github.com/qiuqiangkong/music_source_separation
-cd mss
+cd music_source_separation
 
 # Install Python environment
 conda create --name mss python=3.10
@@ -54,7 +54,7 @@ musdb18hq (30 GB)
 Takes \~3 hours on 1 RTX4090 to train for 100,000 steps.
 
 ```python
-CUDA_VISIBLE_DEVICES=0 python train.py --config="./configs/unet.yaml"
+CUDA_VISIBLE_DEVICES=0 python train.py --config="./configs/bsroformer.yaml"
 ```
 
 ```python
@@ -63,5 +63,17 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch --multi_gpu --num_processes 4 tra
 
 ## 3. Inference
 
-## 4. Evaluate
+```python
+CUDA_VISIBLE_DEVICES=0 python inference.py \
+    --config="./configs/bsroformer.yaml" \
+    --ckpt_path="./checkpoints/train/bsroformer/step/step=100000_ema.pth" \
+    --audio_path="./assets/xxx.wav" \
+    --output_path="./out.wav"
+```
 
+## 4. Evaluate
+```python
+CUDA_VISIBLE_DEVICES=0 python evaluate.py \
+    --config="./configs/bsroformer.yaml" \
+    --ckpt_path="./checkpoints/train/bsroformer/step/step=100000_ema.pth"
+```

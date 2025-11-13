@@ -22,9 +22,9 @@ class BSRoformer(Fourier):
         n_bands=256,
         band_dim=64,
         patch_size=[4, 4],
+        dim=768,
         n_layers=12,
         n_heads=12,
-        dim=768,
         rope_len=8192,
         **kwargs
     ) -> None:
@@ -54,8 +54,7 @@ class BSRoformer(Fourier):
         self.rope = RoPE(head_dim=dim // n_heads, max_len=rope_len)
 
         # Transformer blocks
-        self.t_blocks = nn.ModuleList(Block(dim, n_heads) for _ in range(n_layers))
-        self.f_blocks = nn.ModuleList(Block(dim, n_heads) for _ in range(n_layers))
+        self.blocks = nn.ModuleList(Block(dim, n_heads) for _ in range(n_layers))
 
     def forward(self, audio: Tensor) -> Tensor:
         r"""Separation model.
@@ -89,19 +88,15 @@ class BSRoformer(Fourier):
 
         # 1.4 Patchify
         x = self.patch(x)  # shape: (b, d, t, f)
-        B = x.shape[0]
         T1 = x.shape[2]
 
-        # --- 2. Transformer along time and frequency axes ---
-        for t_block, f_block in zip(self.t_blocks, self.f_blocks):
+        # --- 2. Transformer ---
+        x = rearrange(x, 'b d t f -> b (t f) d')
 
-            x = rearrange(x, 'b d t f -> (b f) t d')
-            x = t_block(x, rope=self.rope, pos=None)  # shape: (b*f, t, d)
+        for block in self.blocks:
+            x = block(x, rope=self.rope, pos=None)  # shape: (b*f, t, d)
 
-            x = rearrange(x, '(b f) t d -> (b t) f d', b=B)
-            x = f_block(x, rope=self.rope, pos=None)  # shape: (b*t, f, d)
-
-            x = rearrange(x, '(b t) f d -> b d t f', b=B)  # shape: (b, d, t, f)
+        x = rearrange(x, 'b (t f) d -> b d t f', t=T1)  # shape: (b, d, t, f)
 
         # --- 3. Decode ---
         # 3.1 Unpatchify
