@@ -29,7 +29,7 @@ def evaluate(args) -> None:
         ckpt_path=ckpt_path
     ).to(device)
     
-    Compute SDRs
+    # Compute SDRs
     sdr = validate(
         configs=configs,
         model=model,
