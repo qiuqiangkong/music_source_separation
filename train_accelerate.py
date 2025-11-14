@@ -30,7 +30,6 @@ def train(args) -> None:
     device = configs["train"]["device"]
     precision = configs["train"]["precision"]
     valid_num = configs["validate"]["audios_num"]
-    fast_only = configs["validate"]["fast_only"]
 
     # Checkpoints directory
     config_name = Path(config_path).stem
@@ -124,7 +123,6 @@ def train(args) -> None:
                 model=accelerator.unwrap_model(ema),
                 split="train",
                 audios_num=valid_num,
-                fast_only=fast_only
             )
 
             test_sdr = validate(
@@ -132,7 +130,6 @@ def train(args) -> None:
                 model=accelerator.unwrap_model(ema),
                 split="test",
                 audios_num=valid_num,
-                fast_only=fast_only
             )
 
             if wandb_log:
