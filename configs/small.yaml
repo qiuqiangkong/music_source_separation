@@ -45,5 +45,4 @@ train:
     resume_ckpt_path:  # Leave blank if train from scratch
 
 validate:
-    audios_num: 10
-    fast_only: True
+    audios_num: 5
