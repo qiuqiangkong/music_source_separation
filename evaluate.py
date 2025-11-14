@@ -35,12 +35,10 @@ def evaluate(args) -> None:
         model=model,
         split="test",
         audios_num=None,
-        fast_only=False
     )
 
     print("====== Overall metrics ====== ")
-    print(f"Median SDR: {sdr:.2f} dB, fast SDR: {fast_sdr:.2f} dB")
-    # print("Fast SDR: {}".format(np.nanmedian(fast_sdrs)))
+    print(f"Median SDR: {sdr:.2f} dB")
 
 
 if __name__ == "__main__":

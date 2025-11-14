@@ -32,7 +32,6 @@ def train(args) -> None:
     configs = parse_yaml(config_path)
     device = configs["train"]["device"]
     valid_num = configs["validate"]["audios_num"]
-    fast_only = configs["validate"]["fast_only"]
 
     # Checkpoints directory
     config_name = Path(config_path).stem
@@ -108,40 +107,32 @@ def train(args) -> None:
         # 2.1 Evaluate
         if step % configs["train"]["test_every_n_steps"] == 0:
 
-            train_sdr, train_sdr_fast = validate(
+            train_sdr = validate(
                 configs=configs,
                 model=ema,
                 split="train",
                 audios_num=valid_num,
-                fast_only=fast_only
             )
 
-            test_sdr, test_sdr_fast = validate(
+            test_sdr = validate(
                 configs=configs,
                 model=ema,
                 split="test",
                 audios_num=valid_num,
-                fast_only=fast_only
             )
 
             if wandb_log:
                 wandb.log(
                     data={
                         "train_sdr": train_sdr, 
-                        "train_sdr_fast": train_sdr_fast, 
                         "test_sdr": test_sdr,
-                        "test_sdr_fast": test_sdr_fast,
                     },
                     step=step
                 )
 
             print("====== Overall metrics ====== ")
-            if fast_only:
-                print(f"Train fast SDR: {train_sdr_fast:.2f}")
-                print(f"Test fast SDR: {test_sdr_fast:.2f}")
-            else:
-                print(f"Train SDR: {train_sdr:.2f}, fast SDR: {train_sdr_fast:.2f}")
-                print(f"Test SDR: {test_sdr:.2f}, fast SDR: {test_sdr_fast:.2f}")
+            print(f"Train SDR: {train_sdr:.2f} dB")
+            print(f"Test SDR: {test_sdr:.2f} dB")
         
         # 2.2 Save model
         if step % configs["train"]["save_every_n_steps"] == 0:
@@ -264,7 +255,6 @@ def validate(
     model: nn.Module,
     split: str,
     audios_num: None | int = None,
-    fast_only: bool = False
 ) -> float:
     r"""Validate the model on part of data.
 
@@ -291,7 +281,6 @@ def validate(
     
     stems = ["vocals", "bass", "drums", "other"]
     sdrs = []
-    fast_sdrs = []
 
     for idx in range(0, len(audio_names), skip_n):
 
@@ -315,30 +304,17 @@ def validate(
             batch_size=batch_size
         )  # (c, L)
         
-        sdr, fast_sdr = calculate_sdr(
+        sdr, _ = calculate_sdr(
             output=output, 
             target=data[target_stem], 
             sr=sr, 
-            fast_only=fast_only
         )
         
-        if fast_only:
-            print("{}/{}, {}: fast SDR: {:.2f} dB".format(
-                idx, len(audio_names), audio_name, fast_sdr)
-            )
-        else:
-            print("{}/{}, {}: SDR: {:.2f} dB, fast SDR: {:.2f} dB".format(
-                idx, len(audio_names), audio_name, sdr, fast_sdr)
-            )
+        print("{}/{}, {}, SDR: {:.2f} dB".format(idx, len(audio_names), audio_name, sdr))
 
         sdrs.append(sdr)
-        fast_sdrs.append(fast_sdr)
 
-    
-    sdr = None if fast_only else np.nanmedian(sdrs)
-    fast_sdr = np.nanmedian(fast_sdrs)
-
-    return sdr, fast_sdr
+    return np.nanmedian(sdrs)
 
 
 if __name__ == "__main__":

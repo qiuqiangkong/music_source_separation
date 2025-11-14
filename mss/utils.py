@@ -136,7 +136,7 @@ def calculate_sdr(
     output: np.ndarray, 
     target: np.ndarray, 
     sr: float, 
-    fast_only: bool
+    fast_only: bool = False
 ) -> tuple[float, float]:
     r"""Compute the SDR of separation result.
 
