@@ -86,7 +86,7 @@ def train(args) -> None:
     ema.to(accelerator.device)
 
     # Logger
-    if wandb_log:
+    if wandb_log and accelerator.is_main_process:
         wandb.init(project="mss", name=f"{config_name}")
 
     # Train
@@ -143,7 +143,7 @@ def train(args) -> None:
 
             print("====== Overall metrics ====== ")
             print(f"Train SDR fast: {train_sdr:.2f}")
-            print(f"Test SDR fast: {train_sdr:.2f}")
+            print(f"Test SDR fast: {test_sdr:.2f}")
         
         # 2.2 Save model
         if step % configs["train"]["save_every_n_steps"] == 0 and accelerator.is_main_process:

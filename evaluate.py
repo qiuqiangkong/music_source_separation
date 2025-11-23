@@ -35,6 +35,7 @@ def evaluate(args) -> None:
         model=model,
         split="test",
         audios_num=None,
+        hop_ratio=4
     )
 
     print("====== Overall metrics ====== ")
