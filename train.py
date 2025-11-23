@@ -255,6 +255,7 @@ def validate(
     model: nn.Module,
     split: str,
     audios_num: None | int = None,
+    hop_ratio: int = 1
 ) -> float:
     r"""Validate the model on part of data.
 
@@ -296,11 +297,13 @@ def validate(
         data["mixture"] = np.sum([data[stem] for stem in stems], axis=0)  # (c, L)
 
         # Foward
+        assert segment_samples % hop_ratio == 0
+
         output = separate_overlap_add(
             model=model, 
             audio=data["mixture"], 
             segment_samples=segment_samples,
-            hop_length=segment_samples,
+            hop_length=segment_samples // hop_ratio,
             batch_size=batch_size
         )  # (c, L)
         
