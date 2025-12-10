@@ -1,0 +1,49 @@
+---
+audio_channels: &audio_channels 2
+sample_rate: &sample_rate 48000
+segment_duration: 2.
+target_stem: "vocals"
+
+train_datasets:
+    MUSDB18HQ:
+        root: "./datasets/musdb18hq"
+        split: "train"
+        time_align: "strict"  # "strict" | "group"
+
+test_datasets:
+    MUSDB18HQ:
+        root: "./datasets/musdb18hq"
+        split: "test"
+        
+sampler: RandomSongSampler
+
+model:
+    name: BSRoformerMagPhase5
+    audio_channels: *audio_channels
+    sample_rate: *sample_rate
+    n_fft: 2048 
+    hop_length: 480
+    n_bands: 256
+    band_dim: 64
+    patch_size: [4, 4]
+    n_layers: 12
+    n_heads: 12
+    dim: 384
+
+train:
+    device: cuda
+    num_workers: 64
+    precision: "no"  # "no" (fp32) | bf16"
+    loss: l1
+    optimizer: AdamW
+    lr: 3e-4
+    warm_up_steps: 1000  # Leave blank if no warm up is used
+    batch_size_per_device: 4
+    test_every_n_steps: 20000
+    save_every_n_steps: 50000
+    training_steps: 2000000
+    resume_ckpt_path:  # Leave blank if train from scratch
+
+validate:
+    audios_num: 10
+    fast_only: True
