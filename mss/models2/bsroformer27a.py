@@ -6,13 +6,14 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import Tensor
 
-from mss.models.attention import Block
-from mss.models2.bandsplit_fixmel import BandSplitFixMel
+from mss.models2.attention27a import Block
+from mss.models.bandsplit import BandSplit
 from mss.models.fourier import Fourier
 from mss.models.rope import RoPE
+import time
 
 
-class BSRoformerTmp(Fourier):
+class BSRoformer27a(Fourier):
     def __init__(
         self,
         audio_channels=2,
@@ -39,7 +40,7 @@ class BSRoformerTmp(Fourier):
         self.patch_size = patch_size
 
         # Band split
-        self.bandsplit = BandSplitFixMel(
+        self.bandsplit = BandSplit(
             sr=sample_rate, 
             n_fft=n_fft, 
             n_bands=n_bands,
@@ -54,8 +55,7 @@ class BSRoformerTmp(Fourier):
         self.rope = RoPE(head_dim=dim // n_heads, max_len=rope_len)
 
         # Transformer blocks
-        self.t_blocks = nn.ModuleList(Block(dim, n_heads) for _ in range(n_layers))
-        self.f_blocks = nn.ModuleList(Block(dim, n_heads) for _ in range(n_layers))
+        self.blocks = nn.ModuleList(Block(dim, n_heads) for _ in range(n_layers))
 
     def forward(self, audio: Tensor) -> Tensor:
         r"""Separation model.
@@ -89,19 +89,9 @@ class BSRoformerTmp(Fourier):
 
         # 1.4 Patchify
         x = self.patch(x)  # shape: (b, d, t, f)
-        B = x.shape[0]
-        T1 = x.shape[2]
 
-        # --- 2. Transformer along time and frequency axes ---
-        for t_block, f_block in zip(self.t_blocks, self.f_blocks):
-
-            x = rearrange(x, 'b d t f -> (b f) t d')
-            x = t_block(x, rope=self.rope, pos=None)  # shape: (b*f, t, d)
-
-            x = rearrange(x, '(b f) t d -> (b t) f d', b=B)
-            x = f_block(x, rope=self.rope, pos=None)  # shape: (b*t, f, d)
-
-            x = rearrange(x, '(b t) f d -> b d t f', b=B)  # shape: (b, d, t, f)
+        for block in self.blocks:
+            x = block(x, self.rope, None)
 
         # --- 3. Decode ---
         # 3.1 Unpatchify

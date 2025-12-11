@@ -344,6 +344,18 @@ def get_model(
         from mss.models2.bsroformer25b import BSRoformer25b
         model = BSRoformer25b(**configs["model"])
 
+    elif name == "BSRoformer26a":
+        from mss.models2.bsroformer26a import BSRoformer26a
+        model = BSRoformer26a(**configs["model"])
+
+    elif name == "BSRoformer26d":
+        from mss.models2.bsroformer26d import BSRoformer26d
+        model = BSRoformer26d(**configs["model"])
+
+    elif name == "BSRoformer27a":
+        from mss.models2.bsroformer27a import BSRoformer27a
+        model = BSRoformer27a(**configs["model"])
+
     else:
         raise ValueError(name)    
 
