@@ -51,7 +51,7 @@ class BandSplit(nn.Module):
             self.pre_bands.append(nn.Linear(n_in, self.out_channels))
             self.post_bands.append(nn.Linear(self.out_channels, n_in))
 
-        # from IPython import embed; embed(using=False); os._exit(0)
+        self.streams = None
 
     def init_melbanks(self) -> tuple[np.ndarray, np.ndarray]:
         r"""Initialize mel bins from librosa.
@@ -121,14 +121,19 @@ class BandSplit(nn.Module):
 
         out = torch.zeros((B, D, T, F), device=x.device)
 
+        if self.streams is None:
+            self.streams = [torch.cuda.Stream() for _ in range(self.n_bands)]
+
         for f in range(self.n_bands):
-            indices = getattr(self, f"indices_{f}")
-            y = rearrange(x[:, :, :, indices], 'b c t f -> b t (c f)')
-            y = self.pre_bands[f](y)
-            y = rearrange(y, 'b t d -> b d t')
-            out[:, :, :, f] = y
+
+            stream = self.streams[f]
+            with torch.cuda.stream(stream):
+                indices = getattr(self, f"indices_{f}")
+                y = rearrange(x[:, :, :, indices], 'b c t f -> b t (c f)')
+                y = self.pre_bands[f](y)
+                y = rearrange(y, 'b t d -> b d t')
+                out[:, :, :, f] = y
             
-        # from IPython import embed; embed(using=False); os._exit(0) 
         return out
 
     def inverse_transform(self, x: Tensor) -> Tensor:
@@ -220,5 +225,3 @@ if __name__ == '__main__':
     y = bandsplit.transform(x)  # (b, d, t, k)
     x_hat = bandsplit.inverse_transform(y)  # (b, c, t, f)
     print(x - x_hat)
-    print(y.abs().mean())
-    print(x_hat.abs().mean())

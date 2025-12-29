@@ -43,15 +43,52 @@ class BandSplit(nn.Module):
         self.pre_bands = nn.ModuleList()
         self.post_bands = nn.ModuleList()
 
+        lens = []
+        for i in range(self.n_bands):
+            lens.append(len(torch.nonzero(self.melbanks[i].abs() > 1e-6, as_tuple=True)[0]))
+        max_len = max(lens)
+
+        # masks = torch.zeros(self.n_bands, max_len)
+        # for i in range(self.n_bands):
+        #     masks[i, 0 : lens[i]] = 1
+        # self.register_buffer(name='masks', tensor=Tensor(masks))  # (k, f)
+        
+
+
         for i in range(self.n_bands):
             indices = torch.nonzero(self.melbanks[i].abs() > 1e-6, as_tuple=True)[0]
             self.register_buffer(name=f"indices_{i}", tensor=LongTensor(indices))
 
+            debug = True
+            if debug:
+                n_in_max = self.in_channels * len(indices)
+            else:
+                n_in_max = self.in_channels * max_len
+            
             n_in = self.in_channels * len(indices)
-            self.pre_bands.append(nn.Linear(n_in, self.out_channels))
-            self.post_bands.append(nn.Linear(self.out_channels, n_in))
 
-        # from IPython import embed; embed(using=False); os._exit(0)
+            #
+            bound = 1 / math.sqrt(n_in)
+            # w = rand_uniform((n_in_max, out_channels), -bound, bound)[0 : n_in, :]
+            w = rand_uniform((out_channels, n_in_max), -bound, bound)[:, 0 : n_in]
+            pre_w = nn.Parameter(w)  # (i, f, o)
+            b = rand_uniform((out_channels,), -bound, bound)
+            pre_b = nn.Parameter(b)  # (k, o)
+
+            #
+            bound = 1 / math.sqrt(out_channels)
+            # w = rand_uniform((out_channels, n_in_max), -bound, bound)[:, 0 : n_in]
+            w = rand_uniform((n_in_max, out_channels), -bound, bound)[0 : n_in, :]
+            post_w = nn.Parameter(w)  # (o, i, f)
+            b = rand_uniform((n_in_max,), -bound, bound)[0 : n_in]
+            post_b = nn.Parameter(b)  # (i, f)
+
+            setattr(self, f"pre_w_{i}", pre_w)
+            setattr(self, f"post_w_{i}", post_w)
+            setattr(self, f"pre_b_{i}", pre_b)
+            setattr(self, f"post_b_{i}", post_b)
+
+        # from IPython import embed; embed(using=False); os._exit(0) 
 
     def init_melbanks(self) -> tuple[np.ndarray, np.ndarray]:
         r"""Initialize mel bins from librosa.
@@ -123,12 +160,14 @@ class BandSplit(nn.Module):
 
         for f in range(self.n_bands):
             indices = getattr(self, f"indices_{f}")
-            y = rearrange(x[:, :, :, indices], 'b c t f -> b t (c f)')
-            y = self.pre_bands[f](y)
-            y = rearrange(y, 'b t d -> b d t')
-            out[:, :, :, f] = y
-            
-        # from IPython import embed; embed(using=False); os._exit(0) 
+            _x = rearrange(x[:, :, :, indices], 'b c t f -> b t (c f)')
+            _w = getattr(self, f"pre_w_{f}")
+            _b = getattr(self, f"pre_b_{f}")
+            _y = torch.einsum('bti,oi->bto', _x, _w) + _b  # (b, t, k, o)
+            _y = rearrange(_y, 'b t d -> b d t')
+            out[:, :, :, f] = _y
+
+        # from IPython import embed; embed(using=False); os._exit(0)
         return out
 
     def inverse_transform(self, x: Tensor) -> Tensor:
@@ -157,17 +196,20 @@ class BandSplit(nn.Module):
 
         for f in range(self.n_bands):
             indices = getattr(self, f"indices_{f}")
-            y = x[:, :, :, f]
-            y = rearrange(y, 'b d t -> b t d')
-            y = self.post_bands[f](y)
-            y = rearrange(y, 'b t (c f) -> b c t f', f=len(indices))
-            out.scatter_add_(dim=-1, index=indices[None, None, None, :].repeat(B, D, T, 1), src=y)
+            _x = x[:, :, :, f]
+            _w = getattr(self, f"post_w_{f}")
+            _b = getattr(self, f"post_b_{f}")
+            _y = torch.einsum('bot,io->bti', _x, _w) + _b  # (b, t, k, o)
+            _y = rearrange(_y, 'b t (c f) -> b c t f', f=len(indices)) 
+            out.scatter_add_(dim=-1, index=indices[None, None, None, :].repeat(B, D, T, 1), src=_y)
         
         # Divide overlap add window
         out /= self.ola_window
 
         return out
 
+def rand_uniform(size, vmin, vmax):
+    return torch.rand(size) * (vmax - vmin) + vmin
 
 class BandLinear(nn.Module):
     def __init__(self, n_bands: int, in_channels: int, out_channels: int) -> None:

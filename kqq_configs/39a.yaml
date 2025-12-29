@@ -18,15 +18,14 @@ test_datasets:
 sampler: RandomSongSampler
 
 model:
-    name: BSRoformer43a
+    name: BSRoformer39a
     audio_channels: *audio_channels
     sample_rate: *sample_rate
-    n_ffts: [32, 128, 512, 2048, 8192, 32768]
-    hop_lengths: [8, 32, 128, 512, 2048, 2048]
-    oversampling_factors: [16, 16, 16, 16, 16, 16]
-    n_bands: [64, 64, 256, 256, 256, 256]
-    band_dims: [64, 64, 64, 64, 64, 64]
-    patch_sizes: [[256, 1], [64, 1], [16, 4], [4, 4], [1, 4], [1, 4]]
+    n_fft: 2048 
+    hop_length: 480
+    n_bands: 256
+    band_dim: 64
+    patch_size: [4, 4]
     n_layers: 6
     n_heads: 12
     dim: 384
@@ -39,7 +38,7 @@ train:
     optimizer: AdamW
     lr: 3e-4
     warm_up_steps: 1000  # Leave blank if no warm up is used
-    batch_size_per_device: 2
+    batch_size_per_device: 4
     test_every_n_steps: 20000
     save_every_n_steps: 50000
     training_steps: 2000000

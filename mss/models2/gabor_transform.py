@@ -11,18 +11,18 @@ from mss.models2.fractional_stft import fractional_istft, fractional_stft
 
 
 class GaborTransform(nn.Module):
-    def __init__(self, n_ffts: list, hop_lengths: list, r: int):
+    def __init__(self, n_ffts: list, hop_lengths: list, oversampling_factors: list):
         super().__init__()
 
         self.n_ffts = n_ffts
         self.hop_lengths = hop_lengths
-        self.r = r
+        self.oversampling_factors = oversampling_factors
         self.n_windows = len(self.n_ffts)
 
         for n_fft in self.n_ffts:
             self.register_buffer(f"window_{n_fft}", torch.hann_window(n_fft))
 
-    def encode(self, x: Tensor) -> Tensor:
+    def transform(self, x: Tensor) -> Tensor:
         r"""Encode audio into Gabor features.
 
         w: n_windows
@@ -47,14 +47,15 @@ class GaborTransform(nn.Module):
         for i in range(self.n_windows):
             n_fft = self.n_ffts[i]
             hop_length = self.hop_lengths[i]
-            window = getattr(self, f"window_{n_fft}")   
-            y = fractional_stft(x, n_fft, hop_length, self.r, window) / math.sqrt(self.n_windows)  # (b*c, t, F)
+            r = self.oversampling_factors[i]
+            window = getattr(self, f"window_{n_fft}")
+            y = fractional_stft(x, n_fft, hop_length, r, window) / math.sqrt(self.n_windows)  # (b*c, t, F)
             y = rearrange(y, '(b c) t f -> b c t f', b=B)  # (b, c, t, F)
             out.append(y)
 
         return out
 
-    def decode(self, x: list[Tensor], length: int | None) -> Tensor:
+    def inverse_transform(self, x: list[Tensor], length: int | None) -> Tensor:
         r"""Decode Gabor features into audio.
 
         w: n_windows
@@ -80,9 +81,10 @@ class GaborTransform(nn.Module):
         for i in range(self.n_windows):
             n_fft = self.n_ffts[i]
             hop_length = self.hop_lengths[i]
+            r = self.oversampling_factors[i]
             window = getattr(self, f"window_{n_fft}")  # (n,)
             y = rearrange(x[i], 'b c t f -> (b c) t f')  # (b*c, t, F)
-            y = fractional_istft(y, n_fft, hop_length, self.r, window, length) / math.sqrt(self.n_windows)  # (b*c, L)
+            y = fractional_istft(y, n_fft, hop_length, r, window, length) / math.sqrt(self.n_windows)  # (b*c, L)
             y = rearrange(y, '(b c) l -> b c l', b=B)  # (b, c, L)
             out.add_(y)  # (b, c, L)
         
@@ -100,9 +102,9 @@ if __name__ == '__main__':
     gabor = GaborTransform(
         n_ffts=[512, 2048, 8192],
         hop_lengths=[128, 512, 2048],
-        r=16,
+        oversampling_factors=[16, 16, 16],
     ).to(device)
 
-    y = gabor.encode(x)
-    x_hat = gabor.decode(y, x.shape[-1])
+    y = gabor.transform(x)
+    x_hat = gabor.inverse_transform(y, x.shape[-1])
     print("Error: {}".format((x - x_hat).abs().mean()))

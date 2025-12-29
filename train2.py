@@ -352,9 +352,105 @@ def get_model(
         from mss.models2.bsroformer26d import BSRoformer26d
         model = BSRoformer26d(**configs["model"])
 
+    elif name == "BSRoformer26e":
+        from mss.models2.bsroformer26e import BSRoformer26e
+        model = BSRoformer26e(**configs["model"])
+
     elif name == "BSRoformer27a":
         from mss.models2.bsroformer27a import BSRoformer27a
         model = BSRoformer27a(**configs["model"])
+
+    elif name == "BSRoformer27b":
+        from mss.models2.bsroformer27b import BSRoformer27b
+        model = BSRoformer27b(**configs["model"])
+
+    elif name == "BSRoformer28a":
+        from mss.models2.bsroformer28a import BSRoformer28a
+        model = BSRoformer28a(**configs["model"])
+
+    elif name == "BSRoformer29a":
+        from mss.models2.bsroformer29a import BSRoformer29a
+        model = BSRoformer29a(**configs["model"])
+
+    elif name == "BSRoformer29a":
+        from mss.models2.bsroformer29a import BSRoformer29a
+        model = BSRoformer29a(**configs["model"])
+
+    elif name == "BSRoformer30b":
+        from mss.models2.bsroformer30b import BSRoformer30b
+        model = BSRoformer30b(**configs["model"])
+
+    elif name == "BSRoformer31a":
+        from mss.models2.bsroformer31a import BSRoformer31a
+        model = BSRoformer31a(**configs["model"])
+
+    elif name == "BSRoformer32a":
+        from mss.models2.bsroformer32a import BSRoformer32a
+        model = BSRoformer32a(**configs["model"])
+
+    elif name == "BSRoformer33a":
+        from mss.models2.bsroformer33a import BSRoformer33a
+        model = BSRoformer33a(**configs["model"])
+
+    elif name == "BSRoformer34a":
+        from mss.models2.bsroformer34a import BSRoformer34a
+        model = BSRoformer34a(**configs["model"])
+
+    elif name == "BSRoformer35a":
+        from mss.models2.bsroformer35a import BSRoformer35a
+        model = BSRoformer35a(**configs["model"])
+
+    elif name == "BSRoformer36a":
+        from mss.models2.bsroformer36a import BSRoformer36a
+        model = BSRoformer36a(**configs["model"])
+
+    elif name == "BSRoformer36b":
+        from mss.models2.bsroformer36b import BSRoformer36b
+        model = BSRoformer36b(**configs["model"])
+
+    elif name == "BSRoformer37a":
+        from mss.models2.bsroformer37a import BSRoformer37a
+        model = BSRoformer37a(**configs["model"])
+
+    elif name == "BSRoformer38a":
+        from mss.models2.bsroformer38a import BSRoformer38a
+        model = BSRoformer38a(**configs["model"])
+
+    elif name == "BSRoformer38b":
+        from mss.models2.bsroformer38b import BSRoformer38b
+        model = BSRoformer38b(**configs["model"])
+
+    elif name == "BSRoformer39a":
+        from mss.models2.bsroformer39a import BSRoformer39a
+        model = BSRoformer39a(**configs["model"])
+
+    elif name == "BSRoformer39a2":
+        from mss.models2.bsroformer39a2 import BSRoformer39a2
+        model = BSRoformer39a2(**configs["model"])
+
+    elif name == "BSRoformer39b":
+        from mss.models2.bsroformer39b import BSRoformer39b
+        model = BSRoformer39b(**configs["model"]) 
+
+    elif name == "BSRoformer40a":
+        from mss.models2.bsroformer40a import BSRoformer40a
+        model = BSRoformer40a(**configs["model"])
+
+    elif name == "BSRoformer41a":
+        from mss.models2.bsroformer41a import BSRoformer41a
+        model = BSRoformer41a(**configs["model"])
+
+    elif name == "BSRoformer42a":
+        from mss.models2.bsroformer42a import BSRoformer42a
+        model = BSRoformer42a(**configs["model"])
+
+    elif name == "BSRoformer43a":
+        from mss.models2.bsroformer43a import BSRoformer43a
+        model = BSRoformer43a(**configs["model"])
+
+    elif name == "BSRoformerTmp":
+        from mss.models2.bsroformer_tmp import BSRoformerTmp
+        model = BSRoformerTmp(**configs["model"])
 
     else:
         raise ValueError(name)    

@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from einops import rearrange
-from torch import Tensor, LongTensor
+from torch import Tensor
 from torch.nn.utils.rnn import pad_sequence
 
 
@@ -40,18 +40,54 @@ class BandSplit(nn.Module):
         self.register_buffer(name='melbanks', tensor=Tensor(melbanks))  # (k, f)
         self.register_buffer(name='ola_window', tensor=Tensor(ola_window))  # (f,)
 
-        self.pre_bands = nn.ModuleList()
-        self.post_bands = nn.ModuleList()
+        nonzero_indexes = []  # (k, w)
+        nonzero_melbanks = []  # (k, w)
+        fan_in = []
+        
+        for f in range(self.n_bands):    
+            idxes = torch.nonzero(self.melbanks[f].abs() > 1e-6, as_tuple=True)[0]  # shape: (w,)
+            nonzero_indexes.append(idxes)
+            nonzero_melbanks.append(self.melbanks[f, idxes])
+            fan_in.append(len(idxes) * self.in_channels)
 
-        for i in range(self.n_bands):
-            indices = torch.nonzero(self.melbanks[i].abs() > 1e-6, as_tuple=True)[0]
-            self.register_buffer(name=f"indices_{i}", tensor=LongTensor(indices))
+        max_band_width = max([len(idxes) for idxes in nonzero_indexes])
+        pad = -1
 
-            n_in = self.in_channels * len(indices)
-            self.pre_bands.append(nn.Linear(n_in, self.out_channels))
-            self.post_bands.append(nn.Linear(self.out_channels, n_in))
+        nonzero_indexes = pad_sequence(
+            sequences=nonzero_indexes, 
+            batch_first=True, 
+            padding_value=pad
+        )  # (k, w)
 
-        # from IPython import embed; embed(using=False); os._exit(0)
+        nonzero_melbanks = pad_sequence(
+            sequences=nonzero_melbanks,
+            batch_first=True,
+            padding_value=0.
+        )  # (k, w)
+
+        mask = torch.zeros_like(nonzero_melbanks)  # (k, w)
+        mask[torch.where(nonzero_melbanks != 0)] = 1
+        
+        new_pad = self.n_fft // 2
+        nonzero_indexes[nonzero_indexes == pad] = new_pad
+        
+        self.register_buffer(name="nonzero_indexes", tensor=nonzero_indexes)
+        self.register_buffer(name="nonzero_melbanks", tensor=nonzero_melbanks)
+        self.register_buffer(name="mask", tensor=mask)
+
+        self.pre_bandnet = BandLinear(
+            n_bands=self.n_bands, 
+            in_channels=max_band_width * self.in_channels, 
+            out_channels=self.out_channels,
+            fan_in=torch.Tensor(fan_in)
+        )
+
+        self.post_bandnet = BandLinear(
+            n_bands=self.n_bands, 
+            in_channels=self.out_channels, 
+            out_channels=max_band_width * self.in_channels,
+            fan_in=torch.ones(self.n_bands) * self.out_channels
+        )
 
     def init_melbanks(self) -> tuple[np.ndarray, np.ndarray]:
         r"""Initialize mel bins from librosa.
@@ -114,22 +150,16 @@ class BandSplit(nn.Module):
             x: (b, d, t, k)
         """
 
-        B = x.shape[0]
-        D = self.out_channels
-        T = x.shape[2]
-        F = self.n_bands
+        # Band split
+        x = x[:, :, :, self.nonzero_indexes.flatten()]  # (b, c, t, k*w)
+        x *= self.nonzero_melbanks.flatten() * self.mask.flatten()  # (b, c, t, k*w)
+        x = rearrange(x, 'b c t (k w) -> b t k (w c)', k=self.n_bands)  # (b, t, k, w*c)
 
-        out = torch.zeros((B, D, T, F), device=x.device)
+        # Apply individual MLP on each band
+        x = self.pre_bandnet(x)  # (b, t, k, d)        
+        x = rearrange(x, 'b t k d -> b d t k')  # (b, d, t, k)
 
-        for f in range(self.n_bands):
-            indices = getattr(self, f"indices_{f}")
-            y = rearrange(x[:, :, :, indices], 'b c t f -> b t (c f)')
-            y = self.pre_bands[f](y)
-            y = rearrange(y, 'b t d -> b d t')
-            out[:, :, :, f] = y
-            
-        # from IPython import embed; embed(using=False); os._exit(0) 
-        return out
+        return x
 
     def inverse_transform(self, x: Tensor) -> Tensor:
         r"""Convert mel scale STFT to STFT.
@@ -147,30 +177,36 @@ class BandSplit(nn.Module):
         Outputs:
             y: (b, c, t, f)
         """
-
-        B = x.shape[0]
-        D = self.in_channels
-        T = x.shape[2]
-        F = self.n_fft // 2 + 1
-
-        out = torch.zeros((B, D, T, F), device=x.device)
-
-        for f in range(self.n_bands):
-            indices = getattr(self, f"indices_{f}")
-            y = x[:, :, :, f]
-            y = rearrange(y, 'b d t -> b t d')
-            y = self.post_bands[f](y)
-            y = rearrange(y, 'b t (c f) -> b c t f', f=len(indices))
-            out.scatter_add_(dim=-1, index=indices[None, None, None, :].repeat(B, D, T, 1), src=y)
         
-        # Divide overlap add window
-        out /= self.ola_window
 
-        return out
+        # Apply individual MLP on each band
+        x = rearrange(x, 'b d t k -> b t k d')  # (b, t, k, d_in)
+        x = self.post_bandnet(x)  # (b, t, k, w*c)
+        x = rearrange(x, 'b t k (w c) -> b c t (k w)', c=self.in_channels)  # (b, c, t, k*w)
+
+        # Band combine
+        B, C, T = x.shape[0 : 3]
+        Fq = self.n_fft // 2 + 1
+        buffer = torch.zeros(B, C, T, Fq).to(x.device)  # shape: (b, c, t, f)
+
+        # Mask out
+        x *= self.mask.flatten()
+        
+        # Scatter add
+        buffer.scatter_add_(
+            dim=3, 
+            index=self.nonzero_indexes.flatten()[None, None, None, :].repeat(B, C, T, 1), 
+            src=x
+        )
+
+        # Divide overlap add window
+        buffer /= self.ola_window
+
+        return buffer
 
 
 class BandLinear(nn.Module):
-    def __init__(self, n_bands: int, in_channels: int, out_channels: int) -> None:
+    def __init__(self, n_bands: int, in_channels: int, out_channels: int, fan_in: Tensor) -> None:
         r"""Band split linear layer."""
 
         super().__init__()
@@ -178,8 +214,10 @@ class BandLinear(nn.Module):
         self.weight = nn.Parameter(torch.empty(n_bands, in_channels, out_channels))  # (k, i, o)
         self.bias = nn.Parameter(torch.zeros(n_bands, out_channels))  # (k, o)
 
-        bound = 1 / math.sqrt(in_channels)
-        nn.init.uniform_(self.weight, -bound, bound)
+        bound = 1 / torch.sqrt(fan_in)
+        nn.init.uniform_(self.weight, -1, 1)
+        self.weight.data *= bound[:, None, None]
+
 
     def forward(self, x: Tensor) -> Tensor:
         r"""
@@ -220,5 +258,3 @@ if __name__ == '__main__':
     y = bandsplit.transform(x)  # (b, d, t, k)
     x_hat = bandsplit.inverse_transform(y)  # (b, c, t, f)
     print(x - x_hat)
-    print(y.abs().mean())
-    print(x_hat.abs().mean())

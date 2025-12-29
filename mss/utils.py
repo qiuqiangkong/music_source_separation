@@ -27,6 +27,7 @@ def update_ema(ema: nn.Module, model: nn.Module, decay: float = 0.999) -> None:
 
     # Parameters
     for e, m in zip(ema.parameters(), model.parameters()):
+        # print(e)
         e.mul_(decay).add_(m.data, alpha=1 - decay)
 
     # Buffers (BN running stats, etc)

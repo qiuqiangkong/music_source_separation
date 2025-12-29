@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from einops import rearrange
-from torch import Tensor, LongTensor
+from torch import Tensor
 from torch.nn.utils.rnn import pad_sequence
 
 
@@ -40,18 +40,31 @@ class BandSplit(nn.Module):
         self.register_buffer(name='melbanks', tensor=Tensor(melbanks))  # (k, f)
         self.register_buffer(name='ola_window', tensor=Tensor(ola_window))  # (f,)
 
-        self.pre_bands = nn.ModuleList()
-        self.post_bands = nn.ModuleList()
+        for f in range(self.n_bands):
+            idxes = torch.nonzero(self.melbanks[f].abs() > 1e-6, as_tuple=True)[0]  # shape: (w,)
+            pre_w = nn.Parameter(torch.zeros((in_channels, len(idxes), out_channels)))  # (i, f, o)
+            post_w = nn.Parameter(torch.zeros((out_channels, in_channels, len(idxes))))  # (o, i, f)
+            pre_b = nn.Parameter(torch.zeros((out_channels,)))  # (k, o)
+            post_b = nn.Parameter(torch.zeros((in_channels, len(idxes))))  # (i, f)
 
-        for i in range(self.n_bands):
-            indices = torch.nonzero(self.melbanks[i].abs() > 1e-6, as_tuple=True)[0]
-            self.register_buffer(name=f"indices_{i}", tensor=LongTensor(indices))
+            bound = 1 / math.sqrt(in_channels * (len(idxes)))
+            nn.init.uniform_(pre_w, -bound, bound)
 
-            n_in = self.in_channels * len(indices)
-            self.pre_bands.append(nn.Linear(n_in, self.out_channels))
-            self.post_bands.append(nn.Linear(self.out_channels, n_in))
+            bound = 1 / math.sqrt(out_channels)
+            nn.init.uniform_(post_w, -bound, bound)
 
-        # from IPython import embed; embed(using=False); os._exit(0)
+            debug = False
+            if debug:
+                nn.init.uniform_(pre_b, -1, 1)
+                nn.init.uniform_(post_b, -1, 1)
+
+            setattr(self, f"pre_w_{f}", pre_w)
+            setattr(self, f"post_w_{f}", post_w)
+            setattr(self, f"pre_b_{f}", pre_b)
+            setattr(self, f"post_b_{f}", post_b)
+
+            self.register_buffer(name=f'idxes_{f}', tensor=idxes)
+            self.register_buffer(name=f'melbanks_{f}', tensor=self.melbanks[f, idxes])
 
     def init_melbanks(self) -> tuple[np.ndarray, np.ndarray]:
         r"""Initialize mel bins from librosa.
@@ -114,21 +127,22 @@ class BandSplit(nn.Module):
             x: (b, d, t, k)
         """
 
-        B = x.shape[0]
-        D = self.out_channels
-        T = x.shape[2]
-        F = self.n_bands
+        # x = rearrange(x, 'b d t f -> b t (d f)')
 
-        out = torch.zeros((B, D, T, F), device=x.device)
+        # pre_w: (c, i, o), pre_b: (d)
+
+        B, C, T, F_ = x.shape
+        out = torch.zeros((B, self.out_channels, T, self.n_bands), device=x.device)  # (b, d, t, f)
 
         for f in range(self.n_bands):
-            indices = getattr(self, f"indices_{f}")
-            y = rearrange(x[:, :, :, indices], 'b c t f -> b t (c f)')
-            y = self.pre_bands[f](y)
-            y = rearrange(y, 'b t d -> b d t')
-            out[:, :, :, f] = y
-            
-        # from IPython import embed; embed(using=False); os._exit(0) 
+            idxes = getattr(self, f"idxes_{f}")
+            melbanks = getattr(self, f"melbanks_{f}")
+            _x = x[:, :, :, idxes] * melbanks  # (b, c, t, i)
+            _w = getattr(self, f"pre_w_{f}")  # (c, i, o)
+            _b = getattr(self, f"pre_b_{f}")  # (o,)
+            _y = torch.einsum('bcti,cio->bto', _x, _w) + _b  # (b, t, o)
+            out[:, :, :, f] = rearrange(_y, 'b t o -> b o t')
+
         return out
 
     def inverse_transform(self, x: Tensor) -> Tensor:
@@ -147,58 +161,27 @@ class BandSplit(nn.Module):
         Outputs:
             y: (b, c, t, f)
         """
-
-        B = x.shape[0]
-        D = self.in_channels
-        T = x.shape[2]
-        F = self.n_fft // 2 + 1
-
-        out = torch.zeros((B, D, T, F), device=x.device)
+        
+        B, D, T, F = x.shape
+        out = torch.zeros((B, self.in_channels, T, self.n_fft // 2 + 1), device=x.device)
 
         for f in range(self.n_bands):
-            indices = getattr(self, f"indices_{f}")
-            y = x[:, :, :, f]
-            y = rearrange(y, 'b d t -> b t d')
-            y = self.post_bands[f](y)
-            y = rearrange(y, 'b t (c f) -> b c t f', f=len(indices))
-            out.scatter_add_(dim=-1, index=indices[None, None, None, :].repeat(B, D, T, 1), src=y)
-        
+
+            idxes = getattr(self, f"idxes_{f}")
+            melbanks = getattr(self, f"melbanks_{f}")
+            
+            _x = x[:, :, :, f]  # (b, o, t)
+            _w = getattr(self, f"post_w_{f}")  # (o, c, i)
+            _b = getattr(self, f"post_b_{f}")  # (c, i)
+            _y = torch.einsum('bot,oci->btci', _x, _w) + _b  # (b, t, c, i)
+            _y *= melbanks
+            _y = rearrange(_y, 'b t c i -> b c t i')
+            out.scatter_add_(dim=3, index=idxes[None, None, None, :].repeat(B, self.in_channels, T, 1), src=_y)
+
         # Divide overlap add window
         out /= self.ola_window
 
         return out
-
-
-class BandLinear(nn.Module):
-    def __init__(self, n_bands: int, in_channels: int, out_channels: int) -> None:
-        r"""Band split linear layer."""
-
-        super().__init__()
-
-        self.weight = nn.Parameter(torch.empty(n_bands, in_channels, out_channels))  # (k, i, o)
-        self.bias = nn.Parameter(torch.zeros(n_bands, out_channels))  # (k, o)
-
-        bound = 1 / math.sqrt(in_channels)
-        nn.init.uniform_(self.weight, -bound, bound)
-
-    def forward(self, x: Tensor) -> Tensor:
-        r"""
-
-        b: batch_size
-        t: frames_num
-        k: n_bands
-        i: in_channels
-        o: out_channels
-
-        Args:
-            x: (b, t, k, i)
-
-        Returns:
-            x: (b, t, k, o)
-        """
-
-        # Sum along the input channels axis
-        return torch.einsum('btki,kio->btko', x, self.weight) + self.bias  # (b, t, k, o)
 
 
 if __name__ == '__main__':
@@ -221,4 +204,5 @@ if __name__ == '__main__':
     x_hat = bandsplit.inverse_transform(y)  # (b, c, t, f)
     print(x - x_hat)
     print(y.abs().mean())
-    print(x_hat.abs().mean())
+    print(x_hat.abs().mean()) 
+    from IPython import embed; embed(using=False); os._exit(0)

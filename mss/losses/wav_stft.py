@@ -45,7 +45,7 @@ class MultiResolutionSTFTLoss(nn.Module):
             
             output_Y = torch.stft(rearrange(output, "... s t -> (... s) t"), **stft_kwargs)
             target_Y = torch.stft(rearrange(target, "... s t -> (... s) t"), **stft_kwargs)
-
+            
             loss = loss + F.l1_loss(output_Y, target_Y)
         
         return loss

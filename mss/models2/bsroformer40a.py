@@ -5,17 +5,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 from torch import Tensor
-import time
 
 from mss.models.attention import Block
 from mss.models2.bandsplit25a import BandSplit
 from mss.models.fourier import Fourier
 from mss.models.rope import RoPE
 
-from mss.models2.gabor_transform import GaborTransform
 
-
-class BSRoformer26d(nn.Module): 
+class BSRoformer40a(Fourier):
     def __init__(
         self,
         audio_channels=2,
@@ -32,15 +29,14 @@ class BSRoformer26d(nn.Module):
         **kwargs
     ) -> None:
 
-        super().__init__()
+        super().__init__(
+            n_fft=n_fft, 
+            hop_length=hop_length, 
+            return_complex=True, 
+            normalized=True
+        )
 
         self.patch_size = patch_size
-
-        self.fourier = GaborTransform(
-            n_ffts=[n_fft],
-            hop_lengths=[hop_length],
-            r=1,
-        )
 
         # Band split
         self.bandsplit = BandSplit(
@@ -60,7 +56,7 @@ class BSRoformer26d(nn.Module):
         # Transformer blocks
         self.t_blocks = nn.ModuleList(Block(dim, n_heads) for _ in range(n_layers))
         self.f_blocks = nn.ModuleList(Block(dim, n_heads) for _ in range(n_layers))
-    
+
     def forward(self, audio: Tensor) -> Tensor:
         r"""Separation model.
 
@@ -76,10 +72,11 @@ class BSRoformer26d(nn.Module):
         Outputs:
             output: (b, c, t)
         """
-        
-        features = self.fourier.encode(audio)
-        complex_sp = features[0]
-        
+
+        # --- 1. Encode ---
+        # 1.1 Complex spectrum
+        complex_sp = self.stft(audio)  # shape: (b, c, t, f)
+
         x = torch.view_as_real(complex_sp)  # shape: (b, c, t, f, 2)
         x = rearrange(x, 'b c t f k -> b (c k) t f')  # shape: (b, d, t, f)
         T0 = x.shape[2]
@@ -89,7 +86,6 @@ class BSRoformer26d(nn.Module):
 
         # 1.3 Convert STFT to mel scale
         x = self.bandsplit.transform(x)  # shape: (b, d, t, f)
-        # from IPython import embed; embed(using=False); os._exit(0)
 
         # 1.4 Patchify
         x = self.patch(x)  # shape: (b, d, t, f)
@@ -125,114 +121,10 @@ class BSRoformer26d(nn.Module):
         sep_stft = mask * complex_sp  # shape: (b, c, t, f)
 
         # 3.6 ISTFT
-        output = self.fourier.decode([sep_stft], audio.shape[-1])
-        # from IPython import embed; embed(using=False); os._exit(0)
-        # output = self.istft(sep_stft)  # shape: (b, c, l)
+        output = self.istft(sep_stft)  # shape: (b, c, l)
 
         return output
-    '''
-    def forward(self, audio: Tensor) -> Tensor:
-        r"""Separation model.
 
-        b: batch_size
-        c: channels_num
-        l: audio_samples
-        t: frames_num
-        f: freq_bins
-
-        Args:
-            audio: (b, c, t)
-
-        Outputs:
-            output: (b, c, t)
-        """
-
-        torch.cuda.synchronize()
-        t1 = time.time()
-        features = self.fourier.encode(audio)
-        complex_sp = features[0]
-        torch.cuda.synchronize()
-        print("a1", time.time() - t1)
-        torch.cuda.synchronize()
-        
-        x = torch.view_as_real(complex_sp)  # shape: (b, c, t, f, 2)
-        x = rearrange(x, 'b c t f k -> b (c k) t f')  # shape: (b, d, t, f)
-        T0 = x.shape[2]
-
-        # 1.2 Pad stft
-        x = self.pad_tensor(x)  # x: (b, d, t, f)
-
-        torch.cuda.synchronize()
-        t1 = time.time()
-
-        # 1.3 Convert STFT to mel scale
-        x = self.bandsplit.transform(x)  # shape: (b, d, t, f)
-
-        torch.cuda.synchronize()
-        print("a2", time.time() - t1)
-        torch.cuda.synchronize()
-
-        # 1.4 Patchify
-        x = self.patch(x)  # shape: (b, d, t, f)
-        B = x.shape[0]
-        T1 = x.shape[2]
-
-        torch.cuda.synchronize()
-        t1 = time.time()
-
-        # --- 2. Transformer along time and frequency axes ---
-        for t_block, f_block in zip(self.t_blocks, self.f_blocks):
-
-            x = rearrange(x, 'b d t f -> (b f) t d')
-            x = t_block(x, rope=self.rope, pos=None)  # shape: (b*f, t, d)
-
-            x = rearrange(x, '(b f) t d -> (b t) f d', b=B)
-            x = f_block(x, rope=self.rope, pos=None)  # shape: (b*t, f, d)
-
-            x = rearrange(x, '(b t) f d -> b d t f', b=B)  # shape: (b, d, t, f)
-
-        torch.cuda.synchronize()
-        print("a3", time.time() - t1)
-        torch.cuda.synchronize()
-
-        # --- 3. Decode ---
-        # 3.1 Unpatchify
-        x = self.unpatch(x)  # shape: (b, d, t, f)
-
-        torch.cuda.synchronize()
-        t1 = time.time()
-
-        # 3.2 Convert mel scale STFT to original STFT
-        x = self.bandsplit.inverse_transform(x)  # shape: (b, d, t, f)
-
-        torch.cuda.synchronize()
-        print("a4", time.time() - t1)
-        torch.cuda.synchronize()
-
-        # Unpad
-        x = x[:, :, 0 : T0, :]
-        
-        # 3.3 Get complex mask
-        x = rearrange(x, 'b (c k) t f -> b c t f k', k=2).contiguous()
-        mask = torch.view_as_complex(x)  # shape: (b, c, t, f)
-
-        # 3.5 Calculate stft of separated audio
-        sep_stft = mask * complex_sp  # shape: (b, c, t, f)
-
-        torch.cuda.synchronize()
-        t1 = time.time()
-
-        # 3.6 ISTFT
-        output = self.fourier.decode([sep_stft], audio.shape[-1])
-        # from IPython import embed; embed(using=False); os._exit(0)
-        # output = self.istft(sep_stft)  # shape: (b, c, l)
-
-        torch.cuda.synchronize()
-        print("a5", time.time() - t1)
-        torch.cuda.synchronize()
-
-        return output
-    '''
     def pad_tensor(self, x: Tensor) -> tuple[Tensor, int]:
         r"""Pad a spectrum that can be evenly divided by downsample_ratio.
 
