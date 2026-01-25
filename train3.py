@@ -81,6 +81,8 @@ def train(args) -> None:
     if wandb_log:
         wandb.init(project="mss", name=f"{config_name}")
 
+    # aa = AA(stems=train_dataset.stems)
+
     # Train
     for step, data in enumerate(tqdm(train_dataloader)):
 
@@ -105,7 +107,7 @@ def train(args) -> None:
 
         if step % 100 == 0:
             print(loss)
-
+        
         # ------ 2. Evaluation ------
         # 2.1 Evaluate
         if step % configs["train"]["test_every_n_steps"] == 0:
@@ -146,7 +148,26 @@ def train(args) -> None:
 
         if step == configs["train"]["training_steps"]:
             break
-        
+
+
+# from mss.augmentations.torch.gain import RandomGain
+# from mss.augmentations.torch.pitch import RandomPitch
+# from einops import rearrange
+
+class AA:
+    def __init__(self, stems):
+        self.stems = stems
+        self.random_gain = RandomGain(min_db=-6, max_db=6)
+        self.random_pitch = RandomPitch(sr=48000, min_semitone=-1., max_semitone=1.)
+
+    def __call__(self, data):
+        for stem in self.stems:
+            x = rearrange(data[stem], 'b m c l -> (b m) c l')
+            x = self.random_gain(x)
+            x = self.random_pitch(x)
+            from IPython import embed; embed(using=False); os._exit(0)
+        # self.random_gain(data[])
+
 
 def get_dataset(
     configs: dict, 
@@ -179,35 +200,24 @@ def get_dataset(
                 stem_transform=None
             )
 
-        elif name == "MUSDB18HQ_aug":
+        elif name == "MUSDB18HQIntraMix":
 
-            stem_transform = get_stem_transform(configs[ds][name]["stem_transform"], sr)
+            from mss.datasets.musdb18hq_mix import MUSDB18HQIntraMix
 
-            from mss.datasets.musdb18hq import MUSDB18HQ
-            return MUSDB18HQ(
+            return MUSDB18HQIntraMix(
                 root=configs[ds][name]["root"],
                 split=configs[ds][name]["split"],
                 sr=sr,
-                crop=RandomCrop(clip_duration=segment_duration, end_pad=0.),
+                crop=RandomCrop(clip_duration=configs["load_duration"], end_pad=0.),
+                segment_duration=configs["segment_duration"],
                 target_stems=[target_stem],
-                time_align=configs[ds][name]["time_align"],
+                min_intra_sources=configs["augmentation"]["cpu"]["mixing"]["intra_source"]["min_sources"],
+                max_intra_sources=configs["augmentation"]["cpu"]["mixing"]["intra_source"]["max_sources"],
+                time_align=configs["augmentation"]["cpu"]["mixing"]["extra_source"]["time_align"],
                 mixture_transform=None,
                 group_transform=None,
-                stem_transform=stem_transform
-            )
+                stem_transform=get_stem_transform(configs),
 
-        elif name == "MUSDB18HQ_multi":
-            from mss.datasets.musdb18hq_multi import MUSDB18HQ_multi
-            return MUSDB18HQ_multi(
-                root=configs[ds][name]["root"],
-                split=configs[ds][name]["split"],
-                sr=sr,
-                crop=RandomCrop(clip_duration=segment_duration, end_pad=0.),
-                target_stems=[target_stem],
-                time_align=configs[ds][name]["time_align"],
-                mixture_transform=None,
-                group_transform=None,
-                stem_transform=None
             )
 
         else:
@@ -227,34 +237,44 @@ def get_sampler(configs: dict, dataset: Dataset) -> Iterable:
         from mss.samplers.random_song_sampler_multi import RandomSongSampler_multi
         return RandomSongSampler_multi(dataset)
 
-    else:
-        raise ValueError(name)
-
-
-def get_stem_transform(name, sr):
-
-    if name == "gain":
-        from mss.augmentations.gain import RandomGain
-        return RandomGain()
-
-    elif name == "pitch":
-        from mss.augmentations.pitch import RandomPitch
-        return RandomPitch(sr)
-
-    elif name == "resample":
-        from mss.augmentations.resample import RandomResample
-        return RandomResample(sr)
-
-    elif name == "eq":
-        from mss.augmentations.eq import RandomEQ
-        return RandomEQ(sr)
-
-    elif name == "resample_stretch":
-        from mss.augmentations.resample_stretch import RandomResampleStretch
-        return RandomResampleStretch(sr)
+    elif name == "RandomSongSamplerMix":
+        from mss.samplers.random_song_sampler_mix import RandomSongSamplerMix
+        return RandomSongSamplerMix(dataset, configs["augmentation"]["cpu"]["mixing"]["intra_source"]["max_sources"])
 
     else:
         raise ValueError(name)
+
+
+def get_stem_transform(configs):
+
+    stem_transform = []
+
+    for name, value in configs["augmentation"]["cpu"].items():
+        
+        if name == "gain" and value["enabled"]:
+            from mss.augmentations.numpy.gain import RandomGain
+            stem_transform.append(RandomGain(
+                min_db=value["min_db"], 
+                max_db=value["max_db"]
+            ))
+
+        elif name == "eq" and value["enabled"]:
+            from mss.augmentations.numpy.eq import RandomEQ
+            stem_transform.append(RandomEQ(
+                min_db=value["min_db"], 
+                max_db=value["max_db"],
+                n_bands=value["n_bands"]
+            ))
+
+        elif name == "resample" and value["enabled"]:
+            from mss.augmentations.numpy.resample import RandomResample
+            stem_transform.append(RandomResample(
+                sr=configs["sample_rate"],
+                min_ratio=value["min_ratio"],
+                max_ratio=value["max_ratio"]
+            ))
+
+    return stem_transform
 
 
 def get_model(
@@ -593,22 +613,6 @@ def get_model(
         from mss.models2.bsroformer61a import BSRoformer61a
         model = BSRoformer61a(**configs["model"])
 
-    elif name == "BSRoformer62a":
-        from mss.models2.bsroformer62a import BSRoformer62a
-        model = BSRoformer62a(**configs["model"])
-
-    elif name == "BSRoformer62b":
-        from mss.models2.bsroformer62b import BSRoformer62b
-        model = BSRoformer62b(**configs["model"])
-
-    elif name == "BSRoformer63a":
-        from mss.models2.bsroformer63a import BSRoformer63a
-        model = BSRoformer63a(**configs["model"])
-
-    elif name == "BSRoformer63b":
-        from mss.models2.bsroformer63b import BSRoformer63b
-        model = BSRoformer63b(**configs["model"])
-
     else:
         raise ValueError(name)    
 
@@ -670,7 +674,8 @@ def validate(
     L: audio_samples
     """
 
-    root = configs[f"{split}_datasets"]["MUSDB18HQ"]["root"]
+    # root = configs[f"{split}_datasets"]["MUSDB18HQ"]["root"]
+    root = f"./datasets/musdb18hq"
     sr = configs["sample_rate"]
     segment_duration = configs["segment_duration"]
     target_stem = configs["target_stem"]

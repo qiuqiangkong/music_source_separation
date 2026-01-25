@@ -7,14 +7,14 @@ from einops import rearrange
 from torch import Tensor
 
 from mss.models.attention import Block
-from mss.models2.bandsplit42a import BandSplit
+from mss.models2.bandsplit60a import BandSplit
 from mss.models.fourier import Fourier
 from mss.models.rope import RoPE
 import time
 
 
 
-class BSRoformer42a(Fourier):
+class BSRoformer60b(Fourier):
     def __init__(
         self,
         audio_channels=2,
@@ -46,14 +46,14 @@ class BSRoformer42a(Fourier):
             sr=sample_rate, 
             n_fft=n_fft, 
             n_bands=n_bands,
-            in_channels=2,  # real + imag
+            in_channels=4,  # real + imag
             out_channels=band_dim
         )
 
         # kernel_size = (4, 4)
         kernel_size = patch_size
-        self.patch = Patch(band_dim * audio_channels, dim, kernel_size)
-        self.unpatch = UnPatch(dim, band_dim * audio_channels, kernel_size)
+        self.patch = Patch(band_dim, dim, kernel_size)
+        self.unpatch = UnPatch(dim, band_dim, kernel_size)
 
         # RoPE
         self.rope = RoPE(head_dim=dim // n_heads, max_len=rope_len)
@@ -89,7 +89,9 @@ class BSRoformer42a(Fourier):
         x = self.pad_tensor(x)  # x: (b, d, t, f)
 
         # 1.3 Convert STFT to mel scale
+        x = rearrange(x, 'b c t f k -> b (c k) t f')
         x = self.bandsplit.transform(x)  # shape: (b, c, t, f, o)
+        x = rearrange(x, 'b (c k) t f -> b c t f k', c=2)
         x = self.patch(x)
 
         B = x.shape[0]
@@ -111,13 +113,16 @@ class BSRoformer42a(Fourier):
         x = self.unpatch(x, self.ac)
 
         # 3.2 Convert mel scale STFT to original STFT
+        x = rearrange(x, 'b c t f k -> b (c k) t f')
         x = self.bandsplit.inverse_transform(x)  # shape: (b, c, t, f, k)
+        x = rearrange(x, 'b (c k) t f -> b c t f k', c=2)
 
         # Unpad
         x = x[:, :, 0 : T0, :, :]
+        x = F.pad(x, pad=(0, 0, 0, 1))
         
         # 3.3 Get complex mask
-        mask = torch.view_as_complex(x)  # shape: (b, c, t, f)
+        mask = torch.view_as_complex(x.contiguous())  # shape: (b, c, t, f)
 
         # 3.5 Calculate stft of separated audio
         sep_stft = mask * complex_sp  # shape: (b, c, t, f)
@@ -140,6 +145,7 @@ class BSRoformer42a(Fourier):
         # Pad last frames, e.g., 201 -> 204
         pad_t = -x.shape[2] % self.patch_size[0]  # Equals to p - (T % p)
         x = F.pad(x, pad=(0, 0, 0, 0, 0, pad_t))
+        x = x[:, :, :, 0 : -1, :]
 
         return x
 

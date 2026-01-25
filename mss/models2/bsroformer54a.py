@@ -8,13 +8,14 @@ from torch import Tensor
 
 from mss.models.attention import Block
 from mss.models2.bandsplit42a import BandSplit
+from mss.models2.bandsplit_linear import BandSplitLinear
 from mss.models.fourier import Fourier
 from mss.models.rope import RoPE
 import time
 
 
 
-class BSRoformer42a(Fourier):
+class BSRoformer54a(Fourier):
     def __init__(
         self,
         audio_channels=2,
@@ -43,6 +44,14 @@ class BSRoformer42a(Fourier):
 
         # Band split
         self.bandsplit = BandSplit(
+            sr=sample_rate, 
+            n_fft=n_fft, 
+            n_bands=n_bands,
+            in_channels=2,  # real + imag
+            out_channels=band_dim
+        )
+
+        self.bandsplit_linear = BandSplitLinear(
             sr=sample_rate, 
             n_fft=n_fft, 
             n_bands=n_bands,
@@ -89,7 +98,9 @@ class BSRoformer42a(Fourier):
         x = self.pad_tensor(x)  # x: (b, d, t, f)
 
         # 1.3 Convert STFT to mel scale
-        x = self.bandsplit.transform(x)  # shape: (b, c, t, f, o)
+        z1 = self.bandsplit.transform(x)  # shape: (b, c, t, f, o)
+        z2 = self.bandsplit_linear.transform(x)
+        x = z1 + z2
         x = self.patch(x)
 
         B = x.shape[0]
@@ -111,7 +122,9 @@ class BSRoformer42a(Fourier):
         x = self.unpatch(x, self.ac)
 
         # 3.2 Convert mel scale STFT to original STFT
-        x = self.bandsplit.inverse_transform(x)  # shape: (b, c, t, f, k)
+        z1 = self.bandsplit.inverse_transform(x)  # shape: (b, c, t, f, k)
+        z2 = self.bandsplit_linear.inverse_transform(x)  # shape: (b, c, t, f, k)
+        x = z1 + z2
 
         # Unpad
         x = x[:, :, 0 : T0, :, :]

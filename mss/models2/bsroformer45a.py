@@ -14,7 +14,7 @@ import time
 
 
 
-class BSRoformer42a(Fourier):
+class BSRoformer45a(Fourier):
     def __init__(
         self,
         audio_channels=2,
@@ -50,8 +50,7 @@ class BSRoformer42a(Fourier):
             out_channels=band_dim
         )
 
-        # kernel_size = (4, 4)
-        kernel_size = patch_size
+        kernel_size = (4, 4)
         self.patch = Patch(band_dim * audio_channels, dim, kernel_size)
         self.unpatch = UnPatch(dim, band_dim * audio_channels, kernel_size)
 
@@ -90,6 +89,8 @@ class BSRoformer42a(Fourier):
 
         # 1.3 Convert STFT to mel scale
         x = self.bandsplit.transform(x)  # shape: (b, c, t, f, o)
+
+        # from IPython import embed; embed(using=False); os._exit(0)
         x = self.patch(x)
 
         B = x.shape[0]
@@ -303,21 +304,35 @@ class BSRoformer42a(Fourier):
 class Patch(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=kernel_size)
+        self.t2, self.f2 = kernel_size
+        self.fc1 = nn.Linear(in_channels * self.f2 + self.t2, out_channels)
 
     def __call__(self, x):
-        x = rearrange(x, 'b c t f i -> b (c i) t f')
-        x = self.conv(x)
+
+        a1 = rearrange(x, 'b c (t1 t2) (f1 f2) i -> b t1 f1 t2 (c i f2)', t2=self.t2, f2=self.f2)
+        a2 = torch.eye(self.t2, device=x.device)[None, None, None, :, :].repeat(a1.shape[0 : 3] + (1, 1))
+        a3 = torch.cat([a1, a2], dim=-1)
+        x = self.fc1(a3)  # (b, t1, f1, t2, d)
+        x = x.sum(3)
+        x = rearrange(x, 'b t1 f1 d -> b d t1 f1')
         return x
 
 
 class UnPatch(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size):
         super().__init__()
-        self.conv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=kernel_size, stride=kernel_size)
+        self.t2, self.f2 = kernel_size
+        self.fc1 = nn.Linear(in_channels + self.t2, out_channels * self.f2)
 
     def __call__(self, x, audio_channels):
-        x = self.conv(x)
-        x = rearrange(x, 'b (c i) t f -> b c t f i', c=audio_channels)
         
+        from IPython import embed; embed(using=False); os._exit(0)
+
+        x = rearrange(x, 'b d t1 f1 -> b t1 f1 d')
+        a1 = x[:, :, :, None, :].repeat(1, 1, 1, self.t2, 1)  # (b, t1, f1, t2, d)
+        a2 = torch.eye(self.t2, device=x.device)[None, None, None, :, :].repeat(x.shape[0 : 3] + (1, 1))
+        a3 = torch.cat([a1, a2], dim=-1)
+        x = self.fc1(a3)  # (b, t1, f1, t2, c*i*f2)
+        x = rearrange(x, 'b t1 f1 t2 (c i f2) -> b c (t1 t2) (f1 f2) i', c=audio_channels, f2=self.f2)
+
         return x

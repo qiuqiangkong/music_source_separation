@@ -7,14 +7,14 @@ from einops import rearrange
 from torch import Tensor
 
 from mss.models.attention import Block
-from mss.models2.bandsplit42a import BandSplit
+from mss.models2.bandsplit56a import BandSplit
 from mss.models.fourier import Fourier
 from mss.models.rope import RoPE
 import time
 
 
 
-class BSRoformer42a(Fourier):
+class BSRoformer56a(Fourier):
     def __init__(
         self,
         audio_channels=2,

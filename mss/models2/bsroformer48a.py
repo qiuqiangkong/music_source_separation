@@ -14,7 +14,7 @@ import time
 
 
 
-class BSRoformer42a(Fourier):
+class BSRoformer48a(Fourier):
     def __init__(
         self,
         audio_channels=2,
@@ -50,17 +50,29 @@ class BSRoformer42a(Fourier):
             out_channels=band_dim
         )
 
-        # kernel_size = (4, 4)
+        dim_pre = 96
+        n_heads_pre = 3
+
+        
+        self.patch_pre = Patch(band_dim * audio_channels, dim_pre, (1, 1))
+        self.unpatch_pre = UnPatch(dim_pre, band_dim * audio_channels, (1, 1))
+
         kernel_size = patch_size
-        self.patch = Patch(band_dim * audio_channels, dim, kernel_size)
-        self.unpatch = UnPatch(dim, band_dim * audio_channels, kernel_size)
+        self.patch = nn.Conv2d(dim_pre, dim, kernel_size=kernel_size, stride=kernel_size)
+        self.unpatch = nn.ConvTranspose2d(dim, dim_pre, kernel_size=kernel_size, stride=kernel_size)
 
         # RoPE
         self.rope = RoPE(head_dim=dim // n_heads, max_len=rope_len)
 
         # Transformer blocks
+        self.t_blocks_pre = nn.ModuleList(Block(dim_pre, n_heads_pre) for _ in range(1))
+        self.f_blocks_pre = nn.ModuleList(Block(dim_pre, n_heads_pre) for _ in range(1))
+
         self.t_blocks = nn.ModuleList(Block(dim, n_heads) for _ in range(n_layers))
         self.f_blocks = nn.ModuleList(Block(dim, n_heads) for _ in range(n_layers))
+
+        self.t_blocks_post = nn.ModuleList(Block(dim_pre, n_heads_pre) for _ in range(1))
+        self.f_blocks_post = nn.ModuleList(Block(dim_pre, n_heads_pre) for _ in range(1))
 
     def forward(self, audio: Tensor) -> Tensor:
         r"""Separation model.
@@ -78,6 +90,7 @@ class BSRoformer42a(Fourier):
             output: (b, c, t)
         """
 
+
         # --- 1. Encode ---
         # 1.1 Complex spectrum
         complex_sp = self.stft(audio)  # shape: (b, c, t, f)
@@ -90,12 +103,26 @@ class BSRoformer42a(Fourier):
 
         # 1.3 Convert STFT to mel scale
         x = self.bandsplit.transform(x)  # shape: (b, c, t, f, o)
+
+        x = self.patch_pre(x)
+        a0 = x
+        
+        B = x.shape[0]
+
+        # Pre
+        for t_block, f_block in zip(self.t_blocks_pre, self.f_blocks_pre):
+            x = rearrange(x, 'b d t f -> (b f) t d')
+            x = t_block(x, rope=self.rope, pos=None)  # shape: (b*f, t, d)
+
+            x = rearrange(x, '(b f) t d -> (b t) f d', b=B)
+            x = f_block(x, rope=self.rope, pos=None)  # shape: (b*t, f, d)
+
+            x = rearrange(x, '(b t) f d -> b d t f', b=B)  # shape: (b, d, t, f)
+
+        a1 = x
         x = self.patch(x)
 
-        B = x.shape[0]
-        # T1 = x.shape[2]
-
-        # --- 2. Transformer along time and frequency axes ---
+        # Middle
         for t_block, f_block in zip(self.t_blocks, self.f_blocks):
 
             x = rearrange(x, 'b d t f -> (b f) t d')
@@ -106,9 +133,23 @@ class BSRoformer42a(Fourier):
 
             x = rearrange(x, '(b t) f d -> b d t f', b=B)  # shape: (b, d, t, f)
 
+        x = self.unpatch(x)
+        a2 = x
+        x = a1 + a2
+        
+        # Post
+        for t_block, f_block in zip(self.t_blocks_pre, self.f_blocks_pre):
+            x = rearrange(x, 'b d t f -> (b f) t d')
+            x = t_block(x, rope=self.rope, pos=None)  # shape: (b*f, t, d)
+
+            x = rearrange(x, '(b f) t d -> (b t) f d', b=B)
+            x = f_block(x, rope=self.rope, pos=None)  # shape: (b*t, f, d)
+
+            x = rearrange(x, '(b t) f d -> b d t f', b=B)  # shape: (b, d, t, f)
+
         # --- 3. Decode ---
         # 3.1 Unpatchify
-        x = self.unpatch(x, self.ac)
+        x = self.unpatch_pre(x, self.ac)
 
         # 3.2 Convert mel scale STFT to original STFT
         x = self.bandsplit.inverse_transform(x)  # shape: (b, c, t, f, k)

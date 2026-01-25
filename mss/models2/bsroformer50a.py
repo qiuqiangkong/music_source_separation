@@ -14,7 +14,7 @@ import time
 
 
 
-class BSRoformer42a(Fourier):
+class BSRoformer50a(Fourier):
     def __init__(
         self,
         audio_channels=2,
@@ -49,11 +49,12 @@ class BSRoformer42a(Fourier):
             in_channels=2,  # real + imag
             out_channels=band_dim
         )
+        # self.pre_conv = nn.Conv2d(audio_channels * 2, dim)
 
         # kernel_size = (4, 4)
         kernel_size = patch_size
-        self.patch = Patch(band_dim * audio_channels, dim, kernel_size)
-        self.unpatch = UnPatch(dim, band_dim * audio_channels, kernel_size)
+        self.patch = Patch(audio_channels * 2, dim, kernel_size)
+        self.unpatch = UnPatch(dim, audio_channels * 2, kernel_size)
 
         # RoPE
         self.rope = RoPE(head_dim=dim // n_heads, max_len=rope_len)
@@ -87,13 +88,12 @@ class BSRoformer42a(Fourier):
 
         # 1.2 Pad stft
         x = self.pad_tensor(x)  # x: (b, d, t, f)
-
-        # 1.3 Convert STFT to mel scale
-        x = self.bandsplit.transform(x)  # shape: (b, c, t, f, o)
         x = self.patch(x)
-
+        
         B = x.shape[0]
-        # T1 = x.shape[2]
+        # T1 = x.shape[2] 
+
+        from IPython import embed; embed(using=False); os._exit(0)
 
         # --- 2. Transformer along time and frequency axes ---
         for t_block, f_block in zip(self.t_blocks, self.f_blocks):
@@ -110,11 +110,10 @@ class BSRoformer42a(Fourier):
         # 3.1 Unpatchify
         x = self.unpatch(x, self.ac)
 
-        # 3.2 Convert mel scale STFT to original STFT
-        x = self.bandsplit.inverse_transform(x)  # shape: (b, c, t, f, k)
-
         # Unpad
-        x = x[:, :, 0 : T0, :, :]
+        x = x[:, :, 0 : T0, :, :].contiguous()
+        # print(x.shape)
+        # from IPython import embed; embed(using=False); os._exit(0)
         
         # 3.3 Get complex mask
         mask = torch.view_as_complex(x)  # shape: (b, c, t, f)
