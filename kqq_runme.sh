@@ -124,6 +124,7 @@ CUDA_VISIBLE_DEVICES=0 python evaluate.py \
 # 54b.yaml      linear band only
 # 55a.yaml      shared band, others same as 42a
 # 56a.yaml      1122444 band
+# 56b.yaml      1122444 overlap band
 # 57a.yaml      201x1025, uTransformer
 
 # * 58a.yaml      aug gain, others same as 42a
@@ -139,9 +140,20 @@ CUDA_VISIBLE_DEVICES=0 python evaluate.py \
 # 62b.yaml      no unet, patch=(4, 1), others same as 61a
 # 63a.yaml      gabor x4, others same as 46a
 # 63b.yaml      gabor x 16, others same as 46a
+# 64a.yaml      UTransformerCat, others same as 42a
+# 65a.yaml      abs pos
+# 65b.yaml      abs pos, all layers
+# 65c.yaml      layer scale. Better than 42a
+# 65d.yaml      layer scale, all freq
+# 66a.yaml      stft 128, 512, 2048 cat
+# 66a2.yaml      stft 128, 512, 2048 cat, weight
+# 67a.yaml      1D transformer
+# 67b.yaml      BSRoformer 2D rope, pretrain
 
-# train3.py     gpu augmentation
+# (torun) 68a.yaml      BS + conv1d_hop30
+# 68b.yaml      BS + conv1d_hop_5_3_2
 
+# --- train3.py augmentation ---
 # 70.yaml       
 
 # ====== Reconstruct ======
@@ -156,11 +168,4 @@ CUDA_VISIBLE_DEVICES=0 python evaluate.py \
 # recon_05a.yaml    band_split_mul_stft
 # recon_06a.yaml    band_split_mul_stft
 
-
-
-这一部分写的详细些，以limitation开头，自然衔接为什么要做这个，列具体数字
-写outcomes, 列具体指标，多少个小时、人数，写具体一点，写once completed, 写 as a contingency plan
-
-
-Name of the PhD student: Runbang WANG Confirm 2026/27 Prospective Year 1 PhD Student: Yes Name of his/her supervisor: Qiuqiang Kong CV of the PhD student: Attached. The research topic chosen: 基于多模态数据的定位感知算法研究
 
