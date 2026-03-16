@@ -8,13 +8,15 @@ from torch import Tensor
 
 from mss.models.attention import Block
 from mss.models2.bandsplit42a import BandSplit
+from mss.models2.bases_wave import transform as bases_wave_transform
+from mss.models2.bases_wave import inverse_transform as bases_wave_inverse_transform
 from mss.models.fourier import Fourier
 from mss.models.rope import RoPE
 import time
 
 
 
-class BSRoformer68b(Fourier):
+class BSRoformer80a(nn.Module):
     def __init__(
         self,
         audio_channels=2,
@@ -31,17 +33,10 @@ class BSRoformer68b(Fourier):
         **kwargs
     ) -> None:
 
-        super().__init__(
-            n_fft=n_fft, 
-            hop_length=hop_length, 
-            return_complex=True, 
-            normalized=True
-        )
+        super().__init__()
 
         self.ac = audio_channels
         self.patch_size = patch_size
-
-        self.wav_encoder = WavEncoder(2, 384)
 
         # Band split
         self.bandsplit = BandSplit(
@@ -52,10 +47,18 @@ class BSRoformer68b(Fourier):
             out_channels=band_dim
         )
 
-        # kernel_size = (4, 4)
-        kernel_size = patch_size
-        self.patch = Patch(band_dim * audio_channels, dim, kernel_size)
-        self.unpatch = UnPatch(dim, band_dim * audio_channels, kernel_size)
+        self.fourier_2048 = Fourier(n_fft=2048, hop_length=480, return_complex=True, normalized=True)
+        self.patch_2048 = Patch(band_dim * audio_channels, dim, (4, 4))
+        self.unpatch_2048 = UnPatch(dim, band_dim * audio_channels, (4, 4))
+
+        #
+        self.bases_wave = BasesWave(n_window=2048, hop_length=480)
+        self.patch_wave = Patch2(2, dim, (4, 32))
+        self.unpatch_wave = UnPatch2(dim, 2, (4, 32))
+
+        #
+        self.pre_fc = nn.Linear(dim*2, dim)
+        self.post_fc = nn.Linear(dim, dim*2)
 
         # RoPE
         self.rope = RoPE(head_dim=dim // n_heads, max_len=rope_len)
@@ -63,11 +66,6 @@ class BSRoformer68b(Fourier):
         # Transformer blocks
         self.t_blocks = nn.ModuleList(Block(dim, n_heads) for _ in range(n_layers))
         self.f_blocks = nn.ModuleList(Block(dim, n_heads) for _ in range(n_layers))
-
-        self.pre_fc = nn.Linear(384*2, 384)
-        self.post_fc = nn.Linear(384, 384*2)
-
-        self.w = nn.Parameter(1/2. * torch.ones(2))
 
     def forward(self, audio: Tensor) -> Tensor:
         r"""Separation model.
@@ -84,31 +82,30 @@ class BSRoformer68b(Fourier):
         Outputs:
             output: (b, c, t)
         """
-        
+
         # --- 1. Encode ---
         # 1.1 Complex spectrum
-        complex_sp = self.stft(audio)  # shape: (b, c, t, f)
-        T0 = complex_sp.shape[2]
-
-        x = torch.view_as_real(complex_sp)  # shape: (b, c, t, f, 2)
-
-        # 1.2 Pad stft
+        sp_2048 = self.fourier_2048.stft(audio)
+        T_2048 = sp_2048.shape[2]
+        x = torch.view_as_real(sp_2048)  # shape: (b, c, t, f, 2)
         x = self.pad_tensor(x)  # x: (b, d, t, f)
-
-        # 1.3 Convert STFT to mel scale
         x = self.bandsplit.transform(x)  # shape: (b, c, t, f, o)
-        x = self.patch(x)
+        x = self.patch_2048(x)
+        x_2048 = x
 
-        B, D, T, F_ = x.shape
-        # T1 = x.shape[2]
-
-        x_wav = self.wav_encoder.encode(F.pad(audio, pad=(0, 4800)))  #(b, d, t*f)
-        x_wav = rearrange(x_wav[:, :, 0 : T * F_], 'b d (t f) -> b d t f', t=T)
-
-        x = torch.cat([x, x_wav], dim=1)
+        # Wave
+        x = self.bases_wave.encode(audio)
+        x = self.pad_tensor2(x)  # x: (b, d, t, f)
+        x_wave = self.patch_wave(x)
+        
+        # Concat
+        x = torch.cat([x_2048, x_wave], dim=1)
         x = rearrange(x, 'b d t f -> b t f d')
         x = self.pre_fc(x)
         x = rearrange(x, 'b t f d -> b d t f')
+
+        B = x.shape[0]
+        # T1 = x.shape[2]
 
         # --- 2. Transformer along time and frequency axes ---
         for t_block, f_block in zip(self.t_blocks, self.f_blocks):
@@ -124,33 +121,22 @@ class BSRoformer68b(Fourier):
         x = rearrange(x, 'b d t f -> b t f d')
         x = self.post_fc(x)
         x = rearrange(x, 'b t f d -> b d t f')
-        x, x_wav = x.chunk(chunks=2, dim=1)
-
-        # --- 3. Decode ---
-        # 3.1 Unpatchify
-        x = self.unpatch(x, self.ac)
-
-        # 3.2 Convert mel scale STFT to original STFT
-        x = self.bandsplit.inverse_transform(x)  # shape: (b, c, t, f, k)
-
-        # Unpad
-        x = x[:, :, 0 : T0, :, :]
-        
-        # 3.3 Get complex mask
-        mask = torch.view_as_complex(x)  # shape: (b, c, t, f)
-
-        # 3.5 Calculate stft of separated audio
-        sep_stft = mask * complex_sp  # shape: (b, c, t, f)
-
-        # 3.6 ISTFT
-        output = self.istft(sep_stft)  # shape: (b, c, l)
+        x_2048, x_wave = x.chunk(chunks=2, dim=1)
 
         #
-        x_wav = rearrange(x_wav, 'b d t f -> b d (t f)')
-        output_wav = self.wav_encoder.decode(x_wav)[:, :, 0 : audio.shape[-1]]
-        
-        # output = self.w[0] * output + self.w[1] * output_wav
-        output = output + output_wav
+        x = self.unpatch_2048(x_2048, self.ac)
+        x = self.bandsplit.inverse_transform(x)  # shape: (b, c, t, f, k)
+        x = x[:, :, 0 : T_2048, :, :]
+        mask = torch.view_as_complex(x)  # shape: (b, c, t, f)
+        y_2048 = mask * sp_2048  # shape: (b, c, t, f)
+        y_2048 = self.fourier_2048.istft(y_2048)  # shape: (b, c, l)
+
+        #
+        x = self.unpatch_wave(x_wave, self.ac)
+        x = x[:, :, 0 : T_2048, :]
+        y_wave = self.bases_wave.decode(x, audio.shape[-1])
+
+        output = (y_2048 + y_wave) / 2
 
         return output
 
@@ -170,27 +156,11 @@ class BSRoformer68b(Fourier):
 
         return x
 
+    def pad_tensor2(self, x):
+        pad_t = -x.shape[2] % self.patch_size[0]  # Equals to p - (T % p)
+        x = F.pad(x, pad=(0, 0, 0, pad_t))
 
-class WavEncoder(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.enc1 = nn.Conv1d(in_channels, 64, kernel_size=11, stride=5, padding=5)
-        self.enc2 = nn.Conv1d(64, 192, kernel_size=7, stride=3, padding=3)
-        self.enc3 = nn.Conv1d(192, 384, kernel_size=5, stride=2, padding=2)
-
-        self.dec1 = nn.ConvTranspose1d(384, 192, kernel_size=5, stride=2, padding=2)
-        self.dec2 = nn.ConvTranspose1d(192, 64, kernel_size=7, stride=3, padding=3)
-        self.dec3 = nn.ConvTranspose1d(64, 2, kernel_size=11, stride=5, padding=5)
-
-    def encode(self, x):
-        x = F.gelu(self.enc1(x))
-        x = F.gelu(self.enc2(x))
-        return self.enc3(x)
-
-    def decode(self, x):
-        x = F.gelu(self.dec1(x))
-        x = F.gelu(self.dec2(x))
-        return self.dec3(x)
+        return x
 
 
 class Patch(nn.Module):
@@ -214,3 +184,45 @@ class UnPatch(nn.Module):
         x = rearrange(x, 'b (c i) t f -> b c t f i', c=audio_channels)
         
         return x
+
+
+class Patch2(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=kernel_size)
+
+    def __call__(self, x):
+        x = self.conv(x)
+        return x
+
+
+class UnPatch2(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size):
+        super().__init__()
+        self.conv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=kernel_size, stride=kernel_size)
+
+    def __call__(self, x, audio_channels):
+        x = self.conv(x)
+        return x
+
+
+class BasesWave(nn.Module):
+    def __init__(self, n_window, hop_length):
+        super().__init__()
+        self.n_window = n_window
+        self.hop_length = hop_length
+        self.register_buffer(name="window", tensor=torch.hann_window(n_window))
+
+    def encode(self, x):
+        B, C, L = x.shape
+        x = rearrange(x, 'b c l -> (b c) l')
+        x = bases_wave_transform(x, self.n_window, self.hop_length, self.window)
+        x = rearrange(x, '(b c) t f -> b c t f', b=B)
+        return x
+
+    def decode(self, x, length):
+        B, C, T, F_ = x.shape
+        x = rearrange(x, 'b c t f -> (b c) t f')
+        x = bases_wave_inverse_transform(x, self.n_window, self.hop_length, self.window)
+        x = rearrange(x, '(b c) l -> b c l', b=B)
+        return x[:, :, 0 : length]

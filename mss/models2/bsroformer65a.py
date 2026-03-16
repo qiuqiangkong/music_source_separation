@@ -98,6 +98,8 @@ class BSRoformer65a(Fourier):
         x = x + 0.01 * self.lpe().T[None, :, None, :]
         B = x.shape[0]
         # T1 = x.shape[2]
+        from IPython import embed; embed(using=False); os._exit(0)
+
 
         # --- 2. Transformer along time and frequency axes ---
         for t_block, f_block in zip(self.t_blocks, self.f_blocks):

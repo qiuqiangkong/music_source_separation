@@ -105,8 +105,8 @@ class BSRoformer67b(Fourier):
         for t_block, f_block in zip(self.t_blocks, self.f_blocks):
 
             if self.full_attention:
-                x = t_block(x, rope=self.rope, pos=pos, axis=None)
-                x = f_block(x, rope=self.rope, pos=pos, axis=None)
+                x = t_block(x, rope=self.rope, pos=pos, axis=None, sizes=None)
+                x = f_block(x, rope=self.rope, pos=pos, axis=None, sizes=None)
 
             else:
                 x = t_block(x, rope=self.rope, pos=pos, axis='t', sizes=(T, F_))

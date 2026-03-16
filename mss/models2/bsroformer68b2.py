@@ -14,7 +14,7 @@ import time
 
 
 
-class BSRoformer68b(Fourier):
+class BSRoformer68b2(Fourier):
     def __init__(
         self,
         audio_channels=2,
@@ -174,15 +174,16 @@ class BSRoformer68b(Fourier):
 class WavEncoder(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.enc1 = nn.Conv1d(in_channels, 64, kernel_size=11, stride=5, padding=5)
-        self.enc2 = nn.Conv1d(64, 192, kernel_size=7, stride=3, padding=3)
-        self.enc3 = nn.Conv1d(192, 384, kernel_size=5, stride=2, padding=2)
+        self.enc1 = nn.Conv1d(in_channels, 64, kernel_size=41, stride=5, padding=20)
+        self.enc2 = nn.Conv1d(64, 192, kernel_size=25, stride=3, padding=12)
+        self.enc3 = nn.Conv1d(192, 384, kernel_size=17, stride=2, padding=8)
 
-        self.dec1 = nn.ConvTranspose1d(384, 192, kernel_size=5, stride=2, padding=2)
-        self.dec2 = nn.ConvTranspose1d(192, 64, kernel_size=7, stride=3, padding=3)
-        self.dec3 = nn.ConvTranspose1d(64, 2, kernel_size=11, stride=5, padding=5)
+        self.dec1 = nn.ConvTranspose1d(384, 192, kernel_size=17, stride=2, padding=8)
+        self.dec2 = nn.ConvTranspose1d(192, 64, kernel_size=25, stride=3, padding=12)
+        self.dec3 = nn.ConvTranspose1d(64, 2, kernel_size=41, stride=5, padding=20)
 
     def encode(self, x):
+
         x = F.gelu(self.enc1(x))
         x = F.gelu(self.enc2(x))
         return self.enc3(x)

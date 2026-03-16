@@ -657,6 +657,30 @@ def get_model(
         from mss.models2.bsroformer68b import BSRoformer68b
         model = BSRoformer68b(**configs["model"])
 
+    elif name == "BSRoformer68b2":
+        from mss.models2.bsroformer68b2 import BSRoformer68b2
+        model = BSRoformer68b2(**configs["model"])
+
+    elif name == "BSRoformer80a":
+        from mss.models2.bsroformer80a import BSRoformer80a
+        model = BSRoformer80a(**configs["model"])
+
+    elif name == "BSRoformer80b":
+        from mss.models2.bsroformer80b import BSRoformer80b
+        model = BSRoformer80b(**configs["model"])
+
+    elif name == "BSRoformer81a":
+        from mss.models2.bsroformer81a import BSRoformer81a
+        model = BSRoformer81a(**configs["model"])
+
+    elif name == "BSRoformer81b":
+        from mss.models2.bsroformer81b import BSRoformer81b
+        model = BSRoformer81b(**configs["model"])
+
+    elif name == "BSRoformer81c":
+        from mss.models2.bsroformer81c import BSRoformer81c
+        model = BSRoformer81c(**configs["model"])
+
     else:
         raise ValueError(name)    
 

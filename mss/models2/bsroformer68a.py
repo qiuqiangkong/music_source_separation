@@ -149,7 +149,8 @@ class BSRoformer68a(Fourier):
         x_wav = rearrange(x_wav, 'b d t f -> b d (t f)')
         output_wav = self.wav_encoder.dec1(x_wav)[:, :, 0 : audio.shape[-1]]
 
-        output = self.w[0] * output + self.w[1] * output_wav
+        # output = self.w[0] * output + self.w[1] * output_wav
+        output = output + output_wav
 
         return output
 

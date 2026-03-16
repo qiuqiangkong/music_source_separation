@@ -104,52 +104,16 @@ class RoPE(nn.Module):
         assert H == K * self.head_dim
 
         x = rearrange(x, 'b l n (k h c) -> k b l n h c', k=K, c=2)  # (k, b, l, n, h/k/2, 2)
-        out = torch.zeros_like(x, device=x.device)
+        out = torch.zeros_like(x, device=x.device)  # (k, b, l, n, h/k/2, 2)
 
         for i in range(K):
             p = pos[:, i]  # (l,)
             w = self.w[p][None, :, None, :, :]  # (1, l, 1, h/k/2, 2)
             out[i] = self.rotate(x[i], w)
 
-        return rearrange(x, 'k b l n h c -> b l n (k h c)')  # (b, l, n, h)
-
-    '''
-    def apply_nd(self, x: Tensor, pos: LongTensor) -> Tensor:
-        r"""Apply Nd RoPE with sparse positions.
-
-        b: batch_size
-        l: seq_len
-        n: heads_num
-        h: head_dim
-        k: data dim
-
-        Args:
-            x: (b, l, n, h)
-            pos: (l, k)
-            n_dim: int
-
-        Outputs:
-            out: (b, l, n, h)
-        """
-        
-        B, L, N, H = x.shape
-        K = pos.shape[1]  # rope_dim
-        assert H == K * self.head_dim
-
-        from IPython import embed; embed(using=False); os._exit(0)
-
-        x = rearrange(x, 'b l n (k h c) -> k b l n h c', k=K, c=2)  # (k, b, l, n, h/2, 2)
-        x = x.contiguous()
-
-        for i in range(K):
-            p = pos[:, i]  # (l,)
-            w = self.w[p][None, :, None, :, :]  # (1, l, 1, h/2, 2)
-            x[i] = self.rotate(x[i], w).clone()  # x: (k, b, l, n, h/2, 2)
-
-        out = rearrange(x, 'k b l n h c -> b l n (k h c)')  # (b, l, n, h)
-        
+        out = rearrange(out, 'k b l n h c -> b l n (k h c)')
         return out
-    '''
+
 
 if __name__ == '__main__':
 

@@ -141,17 +141,27 @@ CUDA_VISIBLE_DEVICES=0 python evaluate.py \
 # 63a.yaml      gabor x4, others same as 46a
 # 63b.yaml      gabor x 16, others same as 46a
 # 64a.yaml      UTransformerCat, others same as 42a
-# 65a.yaml      abs pos
+# 65a.yaml      abs pos, slightly worse
 # 65b.yaml      abs pos, all layers
 # 65c.yaml      layer scale. Better than 42a
 # 65d.yaml      layer scale, all freq
 # 66a.yaml      stft 128, 512, 2048 cat
-# 66a2.yaml      stft 128, 512, 2048 cat, weight
+# 66a2.yaml      stft 128, 512, 2048 cat, weight, worse than 66a
 # 67a.yaml      1D transformer
 # 67b.yaml      BSRoformer 2D rope, pretrain
-
-# (torun) 68a.yaml      BS + conv1d_hop30
+# 67b2.yaml     BSRoformer 2D rope, finetune
+# 68a.yaml      BS + conv1d_hop30
 # 68b.yaml      BS + conv1d_hop_5_3_2
+# 68b2.yaml      BS + conv1d_hop_5_3_2, larger kernel
+
+# 80a.yaml      frame theory, stft+wave
+# 80b.yaml      frame theory, stft+haar
+
+# 81a.yaml      filterband, 65 bands, 2s=1200samples, others same as 42a
+# 81b.yaml      filterband, others same as 42a
+# 81c.yaml
+
+
 
 # --- train3.py augmentation ---
 # 70.yaml       
@@ -167,5 +177,3 @@ CUDA_VISIBLE_DEVICES=0 python evaluate.py \
 # recon_04a.yaml    band_split_avg, 
 # recon_05a.yaml    band_split_mul_stft
 # recon_06a.yaml    band_split_mul_stft
-
-
