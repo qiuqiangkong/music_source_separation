@@ -158,8 +158,12 @@ CUDA_VISIBLE_DEVICES=0 python evaluate.py \
 # 80b.yaml      frame theory, stft+haar
 
 # 81a.yaml      filterband, 65 bands, 2s=1200samples, others same as 42a
-# 81b.yaml      filterband, others same as 42a
-# 81c.yaml
+# + 81b.yaml      filterband, 69 bands, 2s=800samples, others same as 42a
+# 81c.yaml      2x, 4x, 8x, 16x downsample, others same as 81c
+# 82a.yaml      wav, others same as 81b. Not work
+# 83a.yaml      linear banks, others same as 81b
+# 83b.yaml      melbanks2, others same as 81b
+# 83c.yaml      erb band, others same as 81b
 
 
 
@@ -177,3 +181,5 @@ CUDA_VISIBLE_DEVICES=0 python evaluate.py \
 # recon_04a.yaml    band_split_avg, 
 # recon_05a.yaml    band_split_mul_stft
 # recon_06a.yaml    band_split_mul_stft
+
+

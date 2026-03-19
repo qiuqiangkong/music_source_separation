@@ -30,6 +30,12 @@ class UpSample(nn.Module):
         Returns:
             out: (b, l_out)
         """
+
+        # from IPython import embed; embed(using=False); os._exit(0)
+        # import matplotlib.pyplot as plt
+        # plt.plot(self.w.cpu().numpy())
+        # plt.savefig("_zz.pdf")
+
         B, L = x.shape
         out = torch.zeros((B, L * self.factor), device=x.device, dtype=x.dtype)  # (b, l_out)
         out[:, ::self.factor] = x  # (b, l_out)

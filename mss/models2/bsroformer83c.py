@@ -6,17 +6,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
-from torch import Tensor, LongTensor
+from torch import Tensor
 
-from mss.models2.dsp.banks import mel_linear_banks
+from mss.models2.dsp.banks import erb_linear_banks
 from mss.models2.dsp.subband import SubbandFilter, SubbandResampler
-from mss.models2.dsp.subband_resampler2 import SubbandResampler2
 from mss.models.attention import Block
 from mss.models.rope import RoPE
 from mss.utils import fast_sdr
 
 
-class BSRoformer81c(nn.Module):
+class BSRoformer83c(nn.Module):
     def __init__(
         self,
         audio_channels=2,
@@ -31,31 +30,15 @@ class BSRoformer81c(nn.Module):
         super().__init__()
         
         self.n_fft = 64
-        self.patch_size_t = 1 
-        W = 800
-
-        f_bnds = [W/8, W/4, W/2, W]
-        self.hop_lengths = [4, 8, 16, 32]
-        factor = sample_rate // W
-        self.factors = [factor*8, factor*4, factor*2, factor]        
+        self.hop_length = 32
+        self.patch_size_t = 1
+        max_bandwidth = 800
+        factor = sample_rate // max_bandwidth
         
         # Subband filter
-        banks = mel_linear_banks(sr=sample_rate, n_bands=64, max_bandwidth=W)
-        bandwidths = [bank[1] - bank[0] for bank in banks]
-        indices = [[] for _ in range(len(f_bnds))]
-
-        # Indices
-        j = 0
-        for i in range(len(banks)):
-            if bandwidths[i] > f_bnds[j]:
-                j += 1
-            indices[j].append(i)
-
-        for i in range(len(indices)):
-            self.register_buffer(f"indices_{i}", LongTensor(indices[i]))  # (k,)
-
+        banks = erb_linear_banks(sr=sample_rate, n_bands=64, max_bandwidth=max_bandwidth)
         self.sb_filter = SubbandFilter(sample_rate, banks)
-        self.sb_resampler = SubbandResampler2(sample_rate, banks, indices, self.factors)
+        self.sb_resampler = SubbandResampler(sample_rate, banks, factor)
         
         # Patch
         in_channels = audio_channels * self.n_fft * 2
@@ -127,45 +110,35 @@ class BSRoformer81c(nn.Module):
      
         return out
 
-    def stft(self, xs):
-        B, C = xs[0].shape[0 : 2]
-        out = []
-        for i in range(len(self.factors)):
-            x = rearrange(xs[i], 'b c k l -> (b c k) l')
-            x = torch.stft(
-                input=x, 
-                n_fft=self.n_fft,
-                hop_length=self.hop_lengths[i],
-                window=torch.hann_window(self.n_fft, device=x.device),
-                normalized=True,
-                onesided=False,
-                return_complex=True
-            )
-            x = rearrange(x, '(b c k) f t -> b c k t f', b=B, c=C)
-            out.append(x)
-        
-        out = torch.cat(out, dim=2)
-        return out
+    def stft(self, x):
+        B, C = x.shape[0 : 2]
+        x = rearrange(x, 'b c k l -> (b c k) l')
+        x = torch.stft(
+            input=x, 
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            window=torch.hann_window(self.n_fft, device=x.device),
+            normalized=True,
+            onesided=False,
+            return_complex=True
+        )
+        x = rearrange(x, '(b c k) f t -> b c k t f', b=B, c=C)
+        return x
 
-    def istft(self, xs):
-        B, C = xs.shape[0 : 2]
-        out = []
-        for i in range(len(self.factors)):
-            indices = getattr(self, f"indices_{i}")
-            x = rearrange(xs[:, :, indices, :, :], 'b c k t f -> (b c k) f t')
-            x = torch.istft(
-                input=x, 
-                n_fft=self.n_fft,
-                hop_length=self.hop_lengths[i],
-                window=torch.hann_window(self.n_fft, device=x.device),
-                normalized=True,
-                onesided=False,
-                return_complex=True
-            )
-            x = rearrange(x, '(b c k) l -> b c k l', b=B, c=C)
-            out.append(x)
-        
-        return out
+    def istft(self, x):
+        B, C = x.shape[0 : 2]
+        x = rearrange(x, 'b c k t f -> (b c k) f t')
+        x = torch.istft(
+            input=x, 
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            window=torch.hann_window(self.n_fft, device=x.device),
+            normalized=True,
+            onesided=False,
+            return_complex=True
+        )
+        x = rearrange(x, '(b c k) l -> b c k l', b=B, c=C)
+        return x
 
     def pad_tensor(self, x: Tensor, patch_size_t) -> Tensor:
         r"""Pad a spectrum that can be evenly divided by downsample_ratio.

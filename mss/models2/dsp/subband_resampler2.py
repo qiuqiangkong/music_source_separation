@@ -10,6 +10,7 @@ from torch import Tensor, LongTensor
 
 from mss.models2.dsp.analytic import analytic_to_real, real_to_analytic
 from mss.models2.dsp.banks import mel_linear_banks
+from mss.models2.dsp.subband import SubbandFilter
 from mss.models2.dsp.convolve import fftconvolve
 from mss.models2.dsp.resample import UpSample
 from mss.utils import fast_sdr
@@ -127,15 +128,17 @@ if __name__ == '__main__':
     
     sr = 48000
     n_bands = 64
-    max_bandwidth = 1200
+    W = 1200
     filter_len = 10001
-    factor = sr // max_bandwidth
+    factor = sr // W
     device = "cuda"
+
+    factors = [factor * 8, factor * 4, factor * 2, factor]
     
     # Melbanks
-    banks = mel_linear_banks(sr=sr, n_bands=n_bands, max_bandwidth=max_bandwidth)
+    banks = mel_linear_banks(sr=sr, n_bands=n_bands, max_bandwidth=W)
     sb_filter = SubbandFilter(sr, banks, filter_len).to(device)
-    sb_resampler = SubbandResampler(sr, banks, factor, filter_len).to(device)
+    sb_resampler = SubbandResampler2(sr, banks, factors, filter_len).to(device)
 
     for _ in range(20):
 
