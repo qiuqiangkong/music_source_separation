@@ -17,6 +17,8 @@ from mss.utils import fast_sdr
 
     
 class SubbandResampler2(nn.Module):
+    r"""Each subband has different downsample factors."""
+    
     def __init__(
         self, 
         sr: int,

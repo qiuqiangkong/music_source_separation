@@ -163,7 +163,8 @@ CUDA_VISIBLE_DEVICES=0 python evaluate.py \
 # 82a.yaml      wav, others same as 81b. Not work
 # 83a.yaml      linear banks, others same as 81b
 # 83b.yaml      melbanks2, others same as 81b
-# 83c.yaml      erb band, others same as 81b
+# + 83c.yaml      erb band, others same as 81b
+# 84a.yaml      erb band, wav, others same as 83c
 
 
 

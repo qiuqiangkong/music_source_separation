@@ -9,7 +9,7 @@ from scipy.signal import firwin
 from torch import Tensor
 
 from mss.models2.dsp.analytic import analytic_to_real, real_to_analytic
-from mss.models2.dsp.banks import mel_linear_banks
+from mss.models2.dsp.banks import mel_linear_banks, erb_linear_banks
 from mss.models2.dsp.convolve import fftconvolve
 from mss.models2.dsp.resample import UpSample
 from mss.utils import fast_sdr
@@ -209,13 +209,15 @@ if __name__ == '__main__':
     
     sr = 48000
     n_bands = 64
-    max_bandwidth = 1200
+    max_bandwidth = 800
     filter_len = 10001
     factor = sr // max_bandwidth
     device = "cuda"
     
     # Melbanks
-    banks = mel_linear_banks(sr=sr, n_bands=n_bands, max_bandwidth=max_bandwidth)
+    # banks = mel_linear_banks(sr=sr, n_bands=n_bands, max_bandwidth=max_bandwidth)
+    banks = erb_linear_banks(sr=sr, n_bands=n_bands, max_bandwidth=max_bandwidth)
+
     sb_filter = SubbandFilter(sr, banks, filter_len).to(device)
     sb_resampler = SubbandResampler(sr, banks, factor, filter_len).to(device)
 

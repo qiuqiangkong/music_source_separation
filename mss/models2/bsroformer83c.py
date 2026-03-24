@@ -75,8 +75,8 @@ class BSRoformer83c(nn.Module):
         x = self.sb_resampler.analysis(x)  # (b, c, k, l')
         complex_sp = self.stft(x)  # (b, c, k, t, f)
 
-        if False:  # For debug. Analysis-synthesis SDR should over 30 dB.
-            self.check_sdr(audio, complex_sp)
+        if True:  # For debug. Analysis-synthesis SDR should over 30 dB.
+            self.check_sdr(audio, complex_sp) 
             os._exit(0)
 
         # Patchify
