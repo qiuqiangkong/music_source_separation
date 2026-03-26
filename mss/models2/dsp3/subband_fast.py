@@ -8,10 +8,13 @@ from einops import rearrange
 from scipy.signal import firwin
 from torch import Tensor
 
-from mss.models2.dsp2.analytic import analytic_to_real, real_to_analytic
-from mss.models2.dsp2.banks import mel_linear_banks, erb_linear_banks
-from mss.models2.dsp2.convolve import fftconvolve_complex
 from mss.utils import fast_sdr
+
+from .analytic import analytic_to_real, real_to_analytic
+from .banks import erb_linear_banks, mel_linear_banks
+from .convolve import polyphase_fftconvolve
+from .upsample import polyphase_fftupsample
+from .utils import shift_frequency
 
 
 class SubbandFilter(nn.Module):
@@ -36,23 +39,21 @@ class SubbandFilter(nn.Module):
         self.window_type = "hamming"
         self.factor = factor
         self.chunk_size = chunk_size
-        self.bandpass_filter_len = 48001
-        self.upsample_filter_len = 10001
-
-        assert self.bandpass_filter_len % 2 == 1
-        assert self.upsample_filter_len % 2 == 1
+        self.bandpass_filter_len = 48000
+        self.upsample_filter_len = 12000
 
         # Bandpass filter
         n_banks = len(banks)
-        w = torch.empty((n_banks, self.bandpass_filter_len))  # (k, m)
+        N = self.bandpass_filter_len - 1
+        w = torch.zeros((n_banks, self.bandpass_filter_len))  # (k, n)
         for i in range(n_banks):
             if i == 0:
-                w[i] = self.lowpass(banks[i][1])
+                w[i, 1 : ] = self.lowpass(banks[i][1], N)
             elif i == n_banks - 1:
-                w[i] = self.highpass(banks[i][0])
+                w[i, 1 :] = self.highpass(banks[i][0], N)
             else:
-                w[i] = self.bandpass(banks[i][0], banks[i][1])
-        self.register_buffer("w", w[:, None, :])  # (m, 1, kernel_size)
+                w[i, 1 :] = self.bandpass(banks[i][0], banks[i][1], N)
+        self.register_buffer("w", w)  # (k, n)
 
         # Check Nyquist sampling rate
         bandwidths = [bank[1] - bank[0] for bank in banks]  # (k,)
@@ -62,8 +63,9 @@ class SubbandFilter(nn.Module):
         self.register_buffer("f_center", Tensor([np.mean(bank) for bank in banks]))  # (k,)
 
         # Upsample filter
-        up = torch.from_numpy(firwin(
-            numtaps=self.upsample_filter_len, 
+        up = torch.zeros(self.upsample_filter_len)
+        up[1 :] = torch.from_numpy(firwin(
+            numtaps=self.upsample_filter_len - 1, 
             cutoff=1. / self.factor, 
             pass_zero="lowpass",
             window="hamming"
@@ -85,17 +87,18 @@ class SubbandFilter(nn.Module):
             out: (b, c, k, l)
         """ 
 
-        B = x.shape[0]
-        x = real_to_analytic(x)  # (b, c, l)
-        
+        # self.factor = 10
+        B, C, L = x.shape
+        x = real_to_analytic(x)  # (b, c, l_up)
+
         x = bandpass_demodulate_downsample(
-            x=rearrange(x, 'b c l -> (b c) 1 l'),  # (b*c, 1, l)
+            x=rearrange(x, 'b c l -> (b c) l'),
             h=self.w, 
             sr=self.sr, 
             freq=-self.f_center, 
             factor=self.factor, 
             chunk_size=self.chunk_size
-        )  # (b*c, k, l_out)
+        )  # (b*c, k, l_down)
         out = rearrange(x, '(b c) k l -> b c k l', b=B)
 
         return out
@@ -116,7 +119,7 @@ class SubbandFilter(nn.Module):
             out: (b, c, l)
         """
         B = x.shape[0]
-
+        
         x = upsample_modulate_sum(
             x=rearrange(x, 'b c k l -> (b c) k l'), 
             up=self.up, 
@@ -130,28 +133,29 @@ class SubbandFilter(nn.Module):
 
         return out
 
-
-    def lowpass(self, f: float) -> Tensor:
+    def lowpass(self, f: float, n: int) -> Tensor:
         h = firwin(
-            numtaps=self.bandpass_filter_len, 
+            numtaps=n, 
             cutoff=f / (self.sr / 2), 
             pass_zero="lowpass",
             window=self.window_type
         )
+        # from IPython import embed; embed(using=False); os._exit(0)
+        # h = firwin(numtaps=5, cutoff=f / (self.sr / 2), pass_zero="lowpass",window=self.window_type)
         return torch.from_numpy(h)  # (n,)
 
-    def bandpass(self, f1: float, f2: float) -> Tensor:
+    def bandpass(self, f1: float, f2: float, n: int) -> Tensor:
         h = firwin(
-            numtaps=self.bandpass_filter_len, 
+            numtaps=n, 
             cutoff=[f1 / (self.sr / 2), f2 / (self.sr / 2)], 
             pass_zero="bandpass",
             window=self.window_type
         )
         return torch.from_numpy(h)  # (n,)
 
-    def highpass(self, f: float) -> Tensor:
+    def highpass(self, f: float, n: int) -> Tensor:
         h = firwin(
-            numtaps=self.bandpass_filter_len, 
+            numtaps=n, 
             cutoff=f / (self.sr / 2), 
             pass_zero="highpass",
             window=self.window_type
@@ -178,8 +182,8 @@ def bandpass_demodulate_downsample(
     n: filter_len
 
     Args:
-        x: (b, 1, l)
-        h: (k, 1, n)
+        x: (b, l)
+        h: (k, n)
         sr: int
         freq: (k,)
         factor: int
@@ -189,7 +193,7 @@ def bandpass_demodulate_downsample(
     """
     B = x.shape[0]
     K = h.shape[0]
-    L = math.ceil(x.shape[2] / factor)
+    L = math.ceil(x.shape[1] / factor)
 
     out = torch.empty(B, K, L, dtype=x.dtype, device=x.device)  # (b, k, l_out)
     k = 0
@@ -197,13 +201,13 @@ def bandpass_demodulate_downsample(
     while k < K:
 
         # Split into bands
-        e = fftconvolve_complex(x, h[k : k + chunk_size, :, :])  # (b, s, l_in)
-        
-        # Demodulate
-        e = shift_frequency(e, freq[k : k + chunk_size], sr)  # (b, s, l_in)
+        e = polyphase_fftconvolve(x, h[k : k + chunk_size, :], factor)  # (b, s, l_up)
 
+        # Demodulate
+        e = shift_frequency(e, freq[k : k + chunk_size], sr, factor)  # (b, s, l_up)
+        
         # Downsample
-        out[:, k : k + chunk_size, :] = e[:, :, 0 :: factor]  # (b, 1, l_out)
+        out[:, k : k + chunk_size, :] = e  # (b, s, l_down)
 
         k += chunk_size
 
@@ -245,43 +249,20 @@ def upsample_modulate_sum(
     while k < K:
         
         # Upsample
-        e = torch.zeros(B, min(chunk_size, K - k), L, dtype=x.dtype, device=x.device)
-        e[:, :, ::factor] = x[:, k : k + chunk_size, :]  # (b, s, l)
-        e = rearrange(e, 'b s l -> (b s) 1 l')  # (b*s, 1, l)
-        e = fftconvolve_complex(e * factor, up[None, None, :])  # (b*s, 1, l)
-        e = rearrange(e, '(b s) 1 l -> b s l', b=B)  # (b, s, l)
-
+        e = x[:, k : k + chunk_size, :]
+        e = rearrange(e, 'b s l -> (b s) l')  # (b*s, 1, l)
+        e = polyphase_fftupsample(e * factor, up, factor)  # (b*s, l)
+        e = rearrange(e, '(b s) l -> b s l', b=B) 
+        
         # # Modulate
         e = shift_frequency(e, freq[k : k + chunk_size], sr)  # (b, s, l)
 
         # # Sum
         out.add_(e.sum(dim=1))  # (b, l)
-
+        
         k += chunk_size
 
     return out
-
-
-def shift_frequency(x: Tensor, f: Tensor, sr: int, n=1) -> Tensor:
-    r"""Shift frequency to -ω0.
-
-    X(j(ω-ω0)) = e^{j(ω0)n}X(jω)
-
-    k: n_bands
-    l: audio_samples
-
-    Args:
-        x: (any, k, l)
-        f: (k,)
-
-    Returns:
-        out: (any, k, l)
-    """
-    omega = f / (sr / 2) * math.pi  # (k,)
-    t = torch.arange(x.shape[-1], device=x.device) * n  # (l,)
-    a = torch.exp(1.j * omega[:, None] * t[None, :])
-    x.mul_(a)
-    return x
 
 
 if __name__ == '__main__':
@@ -289,7 +270,7 @@ if __name__ == '__main__':
     sr = 48000
     n_bands = 256
     max_bandwidth = 800
-    chunk_size = 4  # Try to tune this to balance RAM and computation speed
+    chunk_size = 16  # Try to tune this to balance RAM and computation speed
     factor = sr // max_bandwidth
     device = "cuda"
 
@@ -297,7 +278,7 @@ if __name__ == '__main__':
     # banks = mel_linear_banks(sr=sr, n_bands=n_bands, max_bandwidth=max_bandwidth)
     banks = erb_linear_banks(sr=sr, n_bands=n_bands, max_bandwidth=max_bandwidth)
     sb_filter = SubbandFilter(sr, banks, factor, chunk_size=chunk_size).to(device)
-
+    
     for _ in range(2000):
 
         # Audio

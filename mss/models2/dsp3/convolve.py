@@ -1,6 +1,7 @@
 import torch
-from torch import Tensor
 from einops import rearrange
+from torch import Tensor
+
 from .utils import fix_length
 
 

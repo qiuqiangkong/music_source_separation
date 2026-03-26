@@ -8,10 +8,12 @@ from einops import rearrange
 from scipy.signal import firwin
 from torch import Tensor
 
-from mss.models2.dsp2.analytic import analytic_to_real, real_to_analytic
-from mss.models2.dsp2.banks import mel_linear_banks, erb_linear_banks
-from mss.models2.dsp2.convolve import fftconvolve_complex
 from mss.utils import fast_sdr
+
+from .analytic import analytic_to_real, real_to_analytic
+from .banks import erb_linear_banks, mel_linear_banks
+from .convolve import fftconvolve
+from .utils import shift_frequency
 
 
 class SubbandFilter(nn.Module):
@@ -197,7 +199,7 @@ def bandpass_demodulate_downsample(
     while k < K:
 
         # Split into bands
-        e = fftconvolve_complex(x, h[k : k + chunk_size, :, :])  # (b, s, l_in)
+        e = fftconvolve(x, h[k : k + chunk_size, :, :], use_complex_fft=True, mode="same")  # (b, s, l_in)
         
         # Demodulate
         e = shift_frequency(e, freq[k : k + chunk_size], sr)  # (b, s, l_in)
@@ -248,7 +250,7 @@ def upsample_modulate_sum(
         e = torch.zeros(B, min(chunk_size, K - k), L, dtype=x.dtype, device=x.device)
         e[:, :, ::factor] = x[:, k : k + chunk_size, :]  # (b, s, l)
         e = rearrange(e, 'b s l -> (b s) 1 l')  # (b*s, 1, l)
-        e = fftconvolve_complex(e * factor, up[None, None, :])  # (b*s, 1, l)
+        e = fftconvolve(e * factor, up[None, None, :], use_complex_fft=True, mode="same")  # (b*s, 1, l)
         e = rearrange(e, '(b s) 1 l -> b s l', b=B)  # (b, s, l)
 
         # # Modulate
@@ -260,28 +262,6 @@ def upsample_modulate_sum(
         k += chunk_size
 
     return out
-
-
-def shift_frequency(x: Tensor, f: Tensor, sr: int, n=1) -> Tensor:
-    r"""Shift frequency to -ω0.
-
-    X(j(ω-ω0)) = e^{j(ω0)n}X(jω)
-
-    k: n_bands
-    l: audio_samples
-
-    Args:
-        x: (any, k, l)
-        f: (k,)
-
-    Returns:
-        out: (any, k, l)
-    """
-    omega = f / (sr / 2) * math.pi  # (k,)
-    t = torch.arange(x.shape[-1], device=x.device) * n  # (l,)
-    a = torch.exp(1.j * omega[:, None] * t[None, :])
-    x.mul_(a)
-    return x
 
 
 if __name__ == '__main__':

@@ -4,12 +4,12 @@ from einops import rearrange
 from .utils import fix_length
 
 
-def fftconvolve(x: Tensor, h: Tensor, use_complex_fft: bool, mode="same") -> Tensor:
-    """Convolution with FFT.
+def fftconvolve(x: Tensor, h: Tensor, mode="same") -> Tensor:
+    """Use FFT to implement convolution.
 
     Args:
-        x: (b, i, l), signal
-        h: (o, i, l), signal
+        x: (b, i, l), real signal
+        h: (o, i, l), real signal
 
     Returns:
         out: (b, o, l)
@@ -19,20 +19,48 @@ def fftconvolve(x: Tensor, h: Tensor, use_complex_fft: bool, mode="same") -> Ten
     L2 = h.shape[-1]
     L = L1 + L2 - 1  # full convolution length
 
-    if use_complex_fft:
-        fft = torch.fft.fft
-        ifft = torch.fft.ifft
-    else:
-        fft = torch.fft.rfft
-        ifft = torch.fft.irfft
-
     # pad both sequences to length L
-    X = fft(torch.nn.functional.pad(x, (0, L - L1)))
-    H = fft(torch.nn.functional.pad(h, (0, L - L2)))
+    X = torch.fft.rfft(torch.nn.functional.pad(x, (0, L - L1)))
+    H = torch.fft.rfft(torch.nn.functional.pad(h, (0, L - L2)))
     
     # multiply in frequency domain and IFFT
     Y = torch.einsum('bil,oil->bol', X, H)  # (b, o, l)
-    y = ifft(Y, n=L)
+    y = torch.fft.irfft(Y, n=L)
+
+    if mode == "full":
+        return y
+
+    elif mode == "same":
+        start = (L2 - 1) // 2    
+        end = start + L1
+        return y[:, :, start:end]  # (b, o, l)
+
+    else:
+        raise ValueError(mode)
+
+
+def fftconvolve_complex(x: Tensor, h: Tensor, mode="same") -> Tensor:
+    """Use FFT to implement convolution.
+
+    Args:
+        x: (b, i, l), real signal
+        h: (o, i, l), real signal
+
+    Returns:
+        out: (b, o, l)
+    """
+
+    L1 = x.shape[-1]
+    L2 = h.shape[-1]
+    L = L1 + L2 - 1  # full convolution length
+
+    # pad both sequences to length L
+    X = torch.fft.fft(torch.nn.functional.pad(x, (0, L - L1)))
+    H = torch.fft.fft(torch.nn.functional.pad(h, (0, L - L2)))
+    
+    # multiply in frequency domain and IFFT
+    Y = torch.einsum('bil,oil->bol', X, H)  # (b, o, l)
+    y = torch.fft.ifft(Y, n=L)
 
     if mode == "full":
         return y
@@ -71,7 +99,7 @@ def polyphase_fftconvolve(x: Tensor, w: Tensor, stride: int) -> Tensor:
     assert N % 2 == 0
 
     w = torch.flip(w, dims=[2])  # (b, n2, n1)
-    x = fftconvolve(x, w, use_complex_fft=True, mode="full")  # (b, k, l_down)
+    x = fftconvolve_complex(x, w, mode="full")  # (b, k, l_down)
     out = fix_length(x, N // 2 - 1, L)  # (b, k, l_down)
 
     return out
