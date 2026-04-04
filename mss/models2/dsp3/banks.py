@@ -42,7 +42,7 @@ def mel_linear_banks(
 def erb_linear_banks(
     sr: int, 
     n_bands: int, 
-    max_bandwidth: float
+    max_bandwidth: float,
 ) -> list[tuple[float, float]]:
     r"""ERB bank in low frequency and linear band in high frequency.
 

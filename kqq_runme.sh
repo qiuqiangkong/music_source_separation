@@ -165,8 +165,21 @@ CUDA_VISIBLE_DEVICES=0 python evaluate.py \
 # 83b.yaml      melbanks2, others same as 81b
 # + 83c.yaml      erb band, others same as 81b
 # 84a.yaml      erb band, wav, others same as 83c
+# 85a.yaml      mel subband 256, patch=(4, 4)
+# 85b.yaml      erb subband 256, patch=(4, 4)
+# 86a.yaml      mel subband 64, patch=(4, 1), fft=64, hop=8
+# 86b.yaml      mel subband 64, patch=(1, 1), fft=64, hop=32
+# + 87a.yaml      erb subband 64, patch=(4, 1), fft=64, hop=8, erb better than mel
+# 87b.yaml      erb subband 64, patch=(1, 1), fft=64, hop=32
+# 88a.yaml      erb subband 256, patch=(4, 4), ds=240, fft=16, hop=2
+# 88b.yaml      erb subband 256, patch=(4, 4), ds=240, fft=64, hop=2
+# 89a.yaml      erb subband 32, patch=(4, 1), ds=30, fft=128, hop=16
+# 89b.yaml      erb subband 128, patch=(4, 2), ds=120, fft=32, hop=4
+# 89c.yaml      erb subband 128, patch=(4, 1), ds=120, fft=32, hop=4
+# 89d.yaml      erb subband 256, patch=(4, 1), ds=240, fft=16, hop=2
 
-
+# dsp/dsp3 filter compare
+# 
 
 # --- train3.py augmentation ---
 # 70.yaml       
@@ -182,5 +195,6 @@ CUDA_VISIBLE_DEVICES=0 python evaluate.py \
 # recon_04a.yaml    band_split_avg, 
 # recon_05a.yaml    band_split_mul_stft
 # recon_06a.yaml    band_split_mul_stft
+
 
 

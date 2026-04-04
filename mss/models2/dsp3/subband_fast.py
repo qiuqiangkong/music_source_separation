@@ -26,6 +26,8 @@ class SubbandFilter(nn.Module):
         banks: list[tuple[int, int]],
         factor: int,
         chunk_size = 4,
+        bandpass_filter_len = 48000,
+        upsample_filter_len = 12000
     ):
         r"""
         k: n_bands
@@ -39,8 +41,8 @@ class SubbandFilter(nn.Module):
         self.window_type = "hamming"
         self.factor = factor
         self.chunk_size = chunk_size
-        self.bandpass_filter_len = 48000
-        self.upsample_filter_len = 12000
+        self.bandpass_filter_len = bandpass_filter_len
+        self.upsample_filter_len = upsample_filter_len
 
         # Bandpass filter
         n_banks = len(banks)
