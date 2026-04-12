@@ -175,8 +175,17 @@ CUDA_VISIBLE_DEVICES=0 python evaluate.py \
 # 88b.yaml      erb subband 256, patch=(4, 4), ds=240, fft=64, hop=2
 # 89a.yaml      erb subband 32, patch=(4, 1), ds=30, fft=128, hop=16
 # 89b.yaml      erb subband 128, patch=(4, 2), ds=120, fft=32, hop=4
-# 89c.yaml      erb subband 128, patch=(4, 1), ds=120, fft=32, hop=4
-# 89d.yaml      erb subband 256, patch=(4, 1), ds=240, fft=16, hop=2
+# + 89c.yaml      erb subband 128, patch=(4, 1), ds=120, fft=32, hop=4
+# + 89d.yaml      erb subband 256, patch=(4, 1), ds=240, fft=16, hop=2
+# 90a.yaml      fft=32, hop=8, others same as 87a, sdr=9.0dB
+# 90b.yaml      fft=128, hop=8, others same as 87a, sdr=8.0dB
+# 91a.yaml      conv1d, others same as 87a, sdr=8.7dB
+# 92a.yaml      erb subband 64, patch=(4, 1), multi nfft/hop, others same as 87a
+# 93a.yaml      multil stft, others same as 87a
+# 94a.yaml      nfft=16, hop=2, patch=(16, 1), others same as 87a, slightly better than 87a
+# 95a.yaml      subband 1D Transformer, erb subband=64, patch=(4, 1) others same as 87a
+# 95b.yaml      erb subband=64, n_fft=16, hop=4, patch=(1, 1), others same as 87a
+# 96a.yaml      subband=128, n_fft=16, hop=4, patch=(1, 1), others same as 87a
 
 # dsp/dsp3 filter compare
 # 

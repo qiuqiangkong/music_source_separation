@@ -749,6 +749,42 @@ def get_model(
         from mss.models2.bsroformer89d import BSRoformer89d
         model = BSRoformer89d(**configs["model"])
 
+    elif name == "BSRoformer90a":
+        from mss.models2.bsroformer90a import BSRoformer90a
+        model = BSRoformer90a(**configs["model"])
+
+    elif name == "BSRoformer90b":
+        from mss.models2.bsroformer90b import BSRoformer90b
+        model = BSRoformer90b(**configs["model"])
+
+    elif name == "BSRoformer91a":
+        from mss.models2.bsroformer91a import BSRoformer91a
+        model = BSRoformer91a(**configs["model"])
+
+    elif name == "BSRoformer92a":
+        from mss.models2.bsroformer92a import BSRoformer92a
+        model = BSRoformer92a(**configs["model"])
+
+    elif name == "BSRoformer93a":
+        from mss.models2.bsroformer93a import BSRoformer93a
+        model = BSRoformer93a(**configs["model"])
+
+    elif name == "BSRoformer94a":
+        from mss.models2.bsroformer94a import BSRoformer94a
+        model = BSRoformer94a(**configs["model"])
+
+    elif name == "BSRoformer95a":
+        from mss.models2.bsroformer95a import BSRoformer95a
+        model = BSRoformer95a(**configs["model"])
+
+    elif name == "BSRoformer95b":
+        from mss.models2.bsroformer95b import BSRoformer95b
+        model = BSRoformer95b(**configs["model"])
+
+    elif name == "BSRoformer96a":
+        from mss.models2.bsroformer96a import BSRoformer96a
+        model = BSRoformer96a(**configs["model"])
+
     else:
         raise ValueError(name)    
 
