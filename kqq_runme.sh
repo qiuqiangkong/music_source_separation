@@ -314,6 +314,3 @@ CUDA_VISIBLE_DEVICES=7 python evaluate.py \
 
 
 # 115d, 150k, vocals: 9.05 bass: 5.96 drums: 6.94 other: 5.66
-
-
-
