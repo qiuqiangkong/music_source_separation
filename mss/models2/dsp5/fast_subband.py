@@ -373,5 +373,3 @@ if __name__ == "__main__":
         print(x.shape, y.shape)
         sdr = fast_sdr(audio.cpu().numpy(), y.cpu().numpy())
         print(f"time: {t1:.4f} s, latent: {x.shape}, SDR: {sdr:.2f} dB")
-
-    from IPython import embed; embed(using=False); os._exit(0)
