@@ -99,7 +99,7 @@ def train(args) -> None:
         # 1.3 Optimize
         optimizer.zero_grad()  # Reset all parameter.grad to 0
         loss.backward()  # Update all parameter.grad
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()  # Update all parameters based on all parameter.grad
         scheduler.step()
         update_ema(ema, model, decay=0.999)
@@ -107,10 +107,48 @@ def train(args) -> None:
         if step % 100 == 0:
             grad_norm = get_grad_norm(model)
             print(f"{loss.item():.04f}", f"{grad_norm:.04f}")
+        '''
+        # ------ 2. Evaluation ------
+        # 2.1 Evaluate
+        if step % configs["train"]["test_every_n_steps"] == 0:
+
+            train_sdr = validate(
+                configs=configs,
+                model=ema,
+                split="train",
+                audios_num=valid_num,
+            )
+
+            test_sdr = validate(
+                configs=configs,
+                model=ema,
+                split="test",
+                audios_num=valid_num,
+            )
+
+            if wandb_log:
+                wandb.log(
+                    data={
+                        "train_sdr": train_sdr, 
+                        "test_sdr": test_sdr,
+                    },
+                    step=step
+                )
+
+            print("====== Overall metrics ====== ")
+            print(f"Train SDR: {train_sdr:.2f} dB")
+            print(f"Test SDR: {test_sdr:.2f} dB")
+        
+        # 2.2 Save model
+        if step % configs["train"]["save_every_n_steps"] == 0:
+            
+            ckpt_path = Path(ckpts_dir, f"step={step}_ema.pth")
+            torch.save(ema.state_dict(), ckpt_path)
+            print("Save model to {}".format(ckpt_path))
 
         if step == configs["train"]["training_steps"]:
             break
-
+    '''
 
 def get_grad_norm(model):
     total_norm = 0.0
@@ -920,6 +958,26 @@ def get_model(
         from mss.models2.bsroformer121a import BSRoformer121a
         model = BSRoformer121a(**configs["model"])
 
+    elif name == "BSRoformer135a":
+        from mss.models2.bsroformer135a import BSRoformer135a
+        model = BSRoformer135a(**configs["model"])
+
+    elif name == "BSRoformer135b":
+        from mss.models2.bsroformer135b import BSRoformer135b
+        model = BSRoformer135b(**configs["model"])
+
+    elif name == "BSRoformer136a":
+        from mss.models2.bsroformer136a import BSRoformer136a
+        model = BSRoformer136a(**configs["model"])
+
+    elif name == "BSRoformer136b":
+        from mss.models2.bsroformer136b import BSRoformer136b
+        model = BSRoformer136b(**configs["model"])
+
+    elif name == "BSRoformer137a":
+        from mss.models2.bsroformer137a import BSRoformer137a
+        model = BSRoformer137a(**configs["model"])
+
     elif name == "Jimmy56b":
         from mss.models2.jimmy56b import Jimmy56b
         model = Jimmy56b(**configs["model"])
@@ -930,6 +988,7 @@ def get_model(
     if ckpt_path:
         ckpt = torch.load(ckpt_path)
         model.load_state_dict(ckpt)
+        print(f"Load checkpoint from {ckpt_path}")
 
     return model
 
@@ -1057,21 +1116,6 @@ def get_loss_fn(configs: dict) -> callable:
         from mss.losses.loss_09a import Loss09a
         device = configs["train"]["device"]
         return Loss09a().to(device)
-
-    elif loss_type == "loss_09b":
-        from mss.losses.loss_09b import Loss09b
-        device = configs["train"]["device"]
-        return Loss09b().to(device)
-
-    elif loss_type == "loss_10a":
-        from mss.losses.loss_10a import Loss10a
-        device = configs["train"]["device"]
-        return Loss10a().to(device)
-
-    elif loss_type == "loss_11a":
-        from mss.losses.loss_11a import Loss11a
-        device = configs["train"]["device"]
-        return Loss11a().to(device)
 
     else:
         raise ValueError(loss_type)

@@ -13,7 +13,11 @@ import matplotlib.pyplot as plt
 import librosa
 import soundfile
 import time
+from statistics import mode
 # from torchvision.io import read_video, write_video
+
+import numpy as np
+from mss.models2.dsp5.banks import erb_to_hz, hz_to_erb
 
 
 def add():
@@ -939,5 +943,21 @@ def add32():
         print(f"time: {t1:.4f} s, latent: {x.shape}, SDR: {sdr:.2f} dB")
 
 
+
+
+def add33():
+
+    from mss.models2.dsp5.banks import refine_erb_bands
+
+    n_bands = 128
+    sr = 48000
+    bw = 48
+
+    freqs, idxes = refine_erb_bands(n_bands, sr, bw)
+
+    from IPython import embed; embed(using=False); os._exit(0)
+
+
+
 if __name__ == '__main__':
-    add32()
+    add33()

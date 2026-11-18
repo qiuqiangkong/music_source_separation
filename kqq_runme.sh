@@ -277,8 +277,14 @@ CUDA_VISIBLE_DEVICES=7 python evaluate.py \
 # 134a.yaml      loss_11a, sp loss + mel loss, others as 125b
 
 # train4_01a.yaml      zfturbo aug, others same as 115d
-
 # zf_01a.yaml   bass, others same as 115d
+
+# 135a.yaml     bs, others same as 125b
+# 135b.yaml     full, ft on 135a, others same as 125b, no better
+
+# 136a.yaml     group band, erb max 800 hz
+# 136b.yaml     group band, erb max 100 hz
+# 137a.yaml     group band, erb max 100 hz, no stft
 
 # =============
 # musdb18hq_mix.py  mix_src + aug
@@ -314,3 +320,5 @@ CUDA_VISIBLE_DEVICES=7 python evaluate.py \
 
 
 # 115d, 150k, vocals: 9.05 bass: 5.96 drums: 6.94 other: 5.66
+
+

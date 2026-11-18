@@ -958,6 +958,26 @@ def get_model(
         from mss.models2.bsroformer121a import BSRoformer121a
         model = BSRoformer121a(**configs["model"])
 
+    elif name == "BSRoformer135a":
+        from mss.models2.bsroformer135a import BSRoformer135a
+        model = BSRoformer135a(**configs["model"])
+
+    elif name == "BSRoformer135b":
+        from mss.models2.bsroformer135b import BSRoformer135b
+        model = BSRoformer135b(**configs["model"])
+
+    elif name == "BSRoformer136a":
+        from mss.models2.bsroformer136a import BSRoformer136a
+        model = BSRoformer136a(**configs["model"])
+
+    elif name == "BSRoformer136b":
+        from mss.models2.bsroformer136b import BSRoformer136b
+        model = BSRoformer136b(**configs["model"])
+
+    elif name == "BSRoformer137a":
+        from mss.models2.bsroformer137a import BSRoformer137a
+        model = BSRoformer137a(**configs["model"])
+
     elif name == "Jimmy56b":
         from mss.models2.jimmy56b import Jimmy56b
         model = Jimmy56b(**configs["model"])
@@ -968,6 +988,7 @@ def get_model(
     if ckpt_path:
         ckpt = torch.load(ckpt_path)
         model.load_state_dict(ckpt)
+        print(f"Load checkpoint from {ckpt_path}")
 
     return model
 

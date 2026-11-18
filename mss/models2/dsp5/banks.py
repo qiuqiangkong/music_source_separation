@@ -39,6 +39,34 @@ def filterbank_frequencies(
     return freqs
 
 
+def erb_linear_freqs(n_bands: int, sr: int, freq_step: float) -> np.ndarray:
+
+    edges = erb_to_hz(np.linspace(0, hz_to_erb(sr / 2), n_bands))
+    freqs = [0.]
+    idxes = [0]
+
+    for i in range(1, n_bands):
+        if edges[i] - edges[i - 1] < freq_step:
+            freqs.append(edges[i])
+            idxes.append(i)
+
+        else:
+            n = idxes.count(idxes[-1])
+
+            while n > 0 or freqs[-1] + freq_step < edges[i]:
+                if freqs[-1] + freq_step >= sr / 2:
+                    break
+
+                freqs.append(freqs[-1] + freq_step)
+                idxes.append(i)
+                n -= 1
+
+    freqs.append(sr / 2)
+    idxes.append(idxes[-1])
+
+    return np.array(freqs), np.array(idxes)
+
+
 def get_scale_fns(freq_scale: str) -> tuple[callable, callable]:
     if freq_scale == "mel_linear":
         return hz_to_mel, mel_to_hz

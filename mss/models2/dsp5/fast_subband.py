@@ -11,7 +11,7 @@ from einops import rearrange
 from scipy.signal import firwin, firwin2
 from torch import Tensor
 
-from .banks import filterbank_frequencies
+from .banks import filterbank_frequencies, erb_linear_freqs
 from .convolve import polyphase_fftconvolve
 from .resample import polyphase_fftinterpolate
 from .utils import (complex_to_real_dtype, fast_sdr, real_to_complex_dtype,
@@ -51,7 +51,7 @@ class FastSubband(nn.Module):
         assert bandwidths.max() < sr / self.factor
 
         # Analysis filter
-        filters = [self.build_subband_filter(k) for k in range(len(freqs))]
+        filters = self.build_subband_filters(freqs)
         self.register_buffer("filters", torch.stack(filters).to(self.cmplx_dtype))  # (k, 1, m)
 
         # Center frequency
@@ -145,7 +145,7 @@ class FastSubband(nn.Module):
 
         return x
 
-    def build_subband_filter(self, k: int) -> Tensor:
+    def build_subband_filters(self, freqs: np.ndarray) -> Tensor:
         """Design the analytic analysis filter for the k-th subband.
 
         Args:
@@ -154,31 +154,36 @@ class FastSubband(nn.Module):
         Returns:
             h: (n_taps,), complex filter
         """
+        n_bands = len(freqs)
+        filters = []
 
-        # Lowpass
-        if k == 0:
-            freq = [0, self.freqs[1], self.sr / 2]
-            gain = [1, 0, 0]
+        for k in range(n_bands):
+            if k == 0:
+                freq = [0, self.freqs[1], self.sr / 2]
+                gain = [1, 0, 0]
 
-        # Bandpass
-        elif k == 1:
-            freq = [self.freqs[k - 1], self.freqs[k], self.freqs[k + 1], self.sr / 2]
-            gain = [0, 1, 0, 0]
+            # Bandpass
+            elif k == 1:
+                freq = [self.freqs[k - 1], self.freqs[k], self.freqs[k + 1], self.sr / 2]
+                gain = [0, 1, 0, 0]
 
-        elif 2 <= k < len(self.freqs) - 2:
-            freq = [0, self.freqs[k - 1], self.freqs[k], self.freqs[k + 1], self.sr / 2]
-            gain = [0, 0, 1, 0, 0]
+            elif 2 <= k < len(self.freqs) - 2:
+                freq = [0, self.freqs[k - 1], self.freqs[k], self.freqs[k + 1], self.sr / 2]
+                gain = [0, 0, 1, 0, 0]
 
-        elif  k == len(self.freqs) - 2:
-            freq = [0, self.freqs[k - 1], self.freqs[k], self.freqs[k + 1]]
-            gain = [0, 0, 1, 0]
+            elif  k == len(self.freqs) - 2:
+                freq = [0, self.freqs[k - 1], self.freqs[k], self.freqs[k + 1]]
+                gain = [0, 0, 1, 0]
 
-        # Highpass
-        elif k == len(self.freqs) - 1:
-            freq = [0, self.freqs[-2], self.sr / 2]
-            gain = [0, 0, 1]
+            # Highpass
+            elif k == len(self.freqs) - 1:
+                freq = [0, self.freqs[-2], self.sr / 2]
+                gain = [0, 0, 1]
 
-        return self.build_firwin(freq, gain)
+            h = self.build_firwin(freq, gain)
+            filters.append(h)
+
+        return filters
 
     def build_firwin(
         self,
@@ -329,20 +334,13 @@ if __name__ == "__main__":
 
     sr = 48000
     n_bands = 128
-    subband_max_bandwidth = 800
-    subband_passband = 780
-
     chunk_size = 16  # Try to tune this to balance RAM and computation speed
-    downsample_factor = sr // subband_max_bandwidth
+    half_bw = 50  # 50 | 100 | 200 | 400
+    freq_step = half_bw * 0.95
+    downsample_factor = sr // (half_bw * 2)
     device = "cuda"
 
-    # Mel-to-linear frequency points
-    freqs = filterbank_frequencies(
-        sr=sr, 
-        n_freqs=n_bands, 
-        max_spacing=subband_passband / 2, 
-        freq_scale="mel_linear"
-    )
+    freqs, idxes = erb_linear_freqs(n_bands, sr, freq_step)
 
     # Subband filter
     sb_filter = FastSubband(
@@ -375,3 +373,5 @@ if __name__ == "__main__":
         print(x.shape, y.shape)
         sdr = fast_sdr(audio.cpu().numpy(), y.cpu().numpy())
         print(f"time: {t1:.4f} s, latent: {x.shape}, SDR: {sdr:.2f} dB")
+
+    from IPython import embed; embed(using=False); os._exit(0)
